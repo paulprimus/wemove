@@ -7,6 +7,4 @@ license.workspace = true
 
 [dependencies]
 clap = { workspace = true }
-config = { workspace = true }
-serde = { workspace = true }
-anyhow = { workspace = true }
+dotenvy = { workspace = true }

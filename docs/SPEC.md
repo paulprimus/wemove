@@ -12,15 +12,14 @@ A web application built with Tokio, Axum, and Clap providing a HelloWorld endpoi
 | Web Framework | Axum |
 | CLI | Clap |
 | Logging | Tracing |
-| Configuration | Clap + Env + TOML |
+| Configuration | Clap + Env (.env) |
 
 ## Project Structure
 
 ```
 wemove/
 ├── Cargo.toml              # Workspace root
-├── .env                    # Environment defaults
-├── config.toml             # Config file template
+├── .env                    # Environment variables
 ├── docs/
 │   └── SPEC.md             # This specification
 ├── crates/
@@ -33,7 +32,7 @@ wemove/
 │   ├── config/             # Configuration loading
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       └── lib.rs      # CLI + env + file config
+│   │   └── lib.rs      # CLI + env config
 │   └── server/             # Axum HTTP server
 │       ├── Cargo.toml
 │       └── src/
@@ -41,6 +40,13 @@ wemove/
 │           ├── routes.rs    # Route definitions
 │           ├── handlers.rs # Endpoint handlers
 │           └── middleware.rs # Request logging
+├── web/                    # Angular frontend (CSR, standalone components)
+│   ├── angular.json
+│   ├── package.json
+│   ├── proxy.conf.json     # Dev-server proxy to the Rust backend (/api -> :8080)
+│   └── src/
+│       ├── main.ts
+│       └── app/
 └── tests/
     └── integration_tests.rs
 ```
@@ -54,9 +60,8 @@ wemove/
 
 ### config
 - Clap CLI argument parsing
-- Environment variable loading
-- TOML config file loading
-- Config precedence: CLI > ENV > config.toml
+- Environment variable loading via dotenvy
+- Config precedence: CLI > ENV > defaults
 
 ### server
 - Axum router setup
@@ -67,25 +72,22 @@ wemove/
 ## Configuration
 
 ### Precedence
-CLI arguments > Environment variables > config.toml > defaults
+CLI arguments > Environment variables > .env file > defaults
 
 ### Options
 
-| Option | CLI | Env | Config | Default |
-|--------|-----|-----|--------|---------|
-| Host | `--host` | `HOST` | `server.host` | `127.0.0.1` |
-| Port | `--port` | `PORT` | `server.port` | `8080` |
-| Log Level | `--log-level` | `RUST_LOG` | `logging.level` | `info` |
+| Option | CLI | ENV | Default |
+|--------|-----|-----|---------|
+| Host | `--host` | `HOST` | `127.0.0.1` |
+| Port | `--port` | `PORT` | `8080` |
+| Log Level | `--log-level` | `RUST_LOG` | `info` |
 
-### Example config.toml
+### Example .env
 
-```toml
-[server]
-host = "0.0.0.0"
-port = 8080
-
-[logging]
-level = "debug"
+```env
+HOST=0.0.0.0
+PORT=8080
+RUST_LOG=debug
 ```
 
 ## Endpoints
@@ -153,8 +155,7 @@ Each crate contains unit tests for its components.
 
 ### config
 - `clap` (derive, env)
-- `config`
-- `serde`
+- `dotenvy`
 
 ### server
 - `tokio` (full)
@@ -183,14 +184,33 @@ export RUST_LOG=debug
 cargo run --package server
 ```
 
-### Config file
-```bash
-cp config.toml.example config.toml
-# Edit config.toml
-cargo run --package server
-```
-
 ### Test
 ```bash
 cargo test --workspace
+```
+
+## Frontend (web/)
+
+Angular application (client-side rendering, standalone components, routing enabled).
+
+### Run dev server
+```bash
+cd web
+npm start
+```
+Runs `ng serve` with `proxy.conf.json`, forwarding requests under `/api/*` to the
+Rust backend at `http://127.0.0.1:8080` (prefix stripped). Start the backend
+separately with `cargo run --package server`.
+
+### Build for production
+```bash
+cd web
+npm run build
+```
+Output is written to `web/dist/web`.
+
+### Test
+```bash
+cd web
+npm test
 ```
