@@ -7,7 +7,7 @@ use tower_http::trace::TraceLayer;
 use std::net::SocketAddr;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 
-pub use crate::middleware::AppState;
+pub use crate::state::AppState;
 
 /// Erstellt den Prometheus-Recorder/Exporter und installiert ihn als
 /// globalen Metrics-Recorder. Gibt ein Handle zurück, mit dem der aktuelle
@@ -34,8 +34,4 @@ pub async fn create_app(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(Extension(metrics_handle))
         .with_state(state)
-}
-
-pub fn create_addr(host: String, port: u16) -> SocketAddr {
-    format!("{}:{}", host, port).parse().unwrap()
 }
