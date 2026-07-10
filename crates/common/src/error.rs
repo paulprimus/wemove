@@ -5,8 +5,9 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use utoipa::ToSchema;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, ToSchema)]
 pub enum AppError {
     #[error("Internal server error: {0}")]
     Internal(#[from] anyhow::Error),

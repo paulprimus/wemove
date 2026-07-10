@@ -32,14 +32,14 @@ wemove/
 │   ├── config/             # Configuration loading
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │   └── lib.rs      # CLI + env config
+│   │       └── lib.rs      # CLI + env config
 │   └── server/             # Axum HTTP server
 │       ├── Cargo.toml
 │       └── src/
 │           ├── main.rs
 │           ├── routes.rs    # Route definitions
-│           ├── handlers.rs # Endpoint handlers
-│           └── middleware.rs # Request logging
+│           ├── handlers.rs # Endpoint handlers (utoipa::path annotations)
+│           └── openapi.rs  # OpenAPI spec (utoipa::OpenApi)
 ├── web/                    # Angular frontend (CSR, standalone components)
 │   ├── angular.json
 │   ├── package.json
@@ -92,6 +92,8 @@ RUST_LOG=debug
 
 ## Endpoints
 
+Interaktive API-Dokumentation: Swagger-UI unter `/swagger-ui/`, OpenAPI-Spec als JSON unter `/api-docs/openapi.json`.
+
 ### GET /
 HelloWorld endpoint. Returns a greeting.
 
@@ -133,6 +135,27 @@ Health check endpoint for liveness probes.
 
 - **Request Logging**: All incoming requests logged with method, path, status, and duration
 - **Prometheus Metrics**: HTTP request metrics exported at `/metrics`
+- **Swagger-UI**: OpenAPI documentation at `/swagger-ui/`, spec at `/api-docs/openapi.json`
+
+## OpenAPI / Swagger
+
+Die API ist mit [utoipa](https://github.com/juhaku/utoipa) als OpenAPI-Spezifikation dokumentiert.
+Single Source of Truth ist der Rust-Code – die Spec wird zur Compilezeit generiert.
+
+### Endpoints
+| URL | Beschreibung |
+|-----|-------------|
+| `/api-docs/openapi.json` | OpenAPI 3.0 Spec als JSON |
+| `/swagger-ui/` | Interaktive Swagger-UI |
+
+### Generierung
+DTOs in `crates/common/src/lib.rs` sind mit `#[derive(ToSchema)]` annotiert.
+Handler in `crates/server/src/handlers.rs` sind mit `#[utoipa::path(...)]` versehen.
+Das `ApiDoc`-Struct in `crates/server/src/openapi.rs` sammelt alle Pfade und Schemas.
+
+### TypeScript-Client (Frontend)
+Im `web/`-Verzeichnis generiert `npm run generate:api` aus der laufenden Spec
+einen TypeScript-Client nach `web/src/app/api/`. Das generierte Verzeichnis ist in `.gitignore`.
 
 ## Testing
 
@@ -152,6 +175,7 @@ Each crate contains unit tests for its components.
 - `tracing-subscriber`
 - `thiserror`
 - `serde`
+- `utoipa`
 
 ### config
 - `clap` (derive, env)
@@ -160,9 +184,11 @@ Each crate contains unit tests for its components.
 ### server
 - `tokio` (full)
 - `axum`
-- `axum-prometheus`
+- `metrics` + `metrics-exporter-prometheus`
 - `anyhow`
 - `serde_json`
+- `utoipa`
+- `utoipa-swagger-ui` (axum feature)
 
 ## Usage
 

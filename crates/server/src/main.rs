@@ -1,4 +1,5 @@
 mod handlers;
+mod openapi;
 mod routes;
 mod state;
 

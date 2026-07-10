@@ -5,6 +5,14 @@ use crate::routes::AppState;
 use metrics::counter;
 use std::time::Instant;
 
+#[utoipa::path(
+    get,
+    path = "/",
+    tag = "hello",
+    responses(
+        (status = 200, description = "Returns a hello world message", body = HelloWorldResponse)
+    )
+)]
 pub async fn hello_world() -> Json<HelloWorldResponse> {
     counter!("hello_world_requests_total").increment(1);
     Json(HelloWorldResponse {
@@ -12,6 +20,16 @@ pub async fn hello_world() -> Json<HelloWorldResponse> {
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/",
+    tag = "hello",
+    request_body = HelloWorldRequest,
+    responses(
+        (status = 200, description = "Returns a personalized hello message", body = HelloWorldResponse),
+        (status = 400, description = "Bad request", body = String)
+    )
+)]
 pub async fn hello_world_post(
     State(_state): State<AppState>,
     Json(req): Json<HelloWorldRequest>,
@@ -26,6 +44,14 @@ pub async fn hello_world_post(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "health",
+    responses(
+        (status = 200, description = "Returns the health status", body = HealthResponse)
+    )
+)]
 pub async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
