@@ -42,3 +42,7 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Generated API client (from OpenAPI spec)
+openapi/
+src/app/api/

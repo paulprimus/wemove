@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "generate:api": "openapi --input ../openapi/openapi.json --output ./src/app/api --client axios"
   },
   "private": true,
   "packageManager": "npm@11.16.0",
@@ -17,6 +18,8 @@
     "@angular/forms": "^22.0.0",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
+    "axios": "^1.18.1",
+    "form-data": "^4.0.6",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
@@ -25,6 +28,7 @@
     "@angular/cli": "^22.0.1",
     "@angular/compiler-cli": "^22.0.0",
     "jsdom": "^28.0.0",
+    "openapi-typescript-codegen": "^0.29.0",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
     "vitest": "^4.0.8"
