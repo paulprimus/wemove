@@ -31,9 +31,9 @@ Frontend wird unter `http://localhost:4200` bereitgestellt und leitet `/api/*` R
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | HelloWorld (GET) |
-| `POST /` | HelloWorld mit JSON body |
-| `GET /health` | Health check |
+| `GET /api/main` | Main endpoint (GET) |
+| `POST /api/main` | Main endpoint mit JSON body |
+| `GET /api/health` | Health check |
 | `GET /metrics` | Prometheus metrics |
 
 ## Projektstruktur

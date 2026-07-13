@@ -2,7 +2,7 @@
 
 ## Overview
 
-A web application built with Tokio, Axum, and Clap providing a HelloWorld endpoint with health check.
+A web application built with Tokio, Axum, and Clap providing a Main endpoint with health check.
 
 ## Tech Stack
 
@@ -59,7 +59,7 @@ wemove/
 - Application error types (`thiserror`), framework-agnostic (kein Axum, kein `anyhow` als
   Pflicht-Dependency — `AppError::Internal` trägt eine `String`-Message; die Konvertierung
   aus `anyhow::Error` erfolgt im aufrufenden Code)
-- Shared DTOs (HelloWorldRequest, HelloWorldResponse, HealthResponse), annotiert mit
+- Shared DTOs (MainRequest, MainResponse, HealthResponse), annotiert mit
   `utoipa::ToSchema` für die OpenAPI-Generierung
 
 ### config
@@ -101,18 +101,18 @@ RUST_LOG=debug
 
 Interaktive API-Dokumentation: Swagger-UI unter `/swagger-ui/`, OpenAPI-Spec als JSON unter `/api-docs/openapi.json`.
 
-### GET /
-HelloWorld endpoint. Returns a greeting.
+### GET /api/main
+Main endpoint. Returns a greeting.
 
 **Response (200):**
 ```json
 {
-  "message": "Hello, World!"
+  "message": "Hello, WeMove!"
 }
 ```
 
-### POST /
-HelloWorld endpoint with JSON body support.
+### POST /api/main
+Main endpoint with JSON body support.
 
 **Request:**
 ```json

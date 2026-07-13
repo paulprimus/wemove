@@ -1,9 +1,10 @@
-<h2>Hello World Response</h2>
+<h3>WeMove</h3>
+
 
 @if (error()) {
   <p class="error">Error: {{ error() }}</p>
-} @else if (helloWorldJson()) {
-  <pre class="json">{{ helloWorldJson() }}</pre>
+} @else if (mainJson()) {
+  <pre class="json">{{ mainJson() }}</pre>
 } @else {
   <p>Loading…</p>
 }

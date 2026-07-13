@@ -1,5 +1,5 @@
 use utoipa::OpenApi;
-use common::{HelloWorldRequest, HelloWorldResponse, HealthResponse};
+use common::{MainRequest, MainResponse, HealthResponse};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -7,7 +7,7 @@ use common::{HelloWorldRequest, HelloWorldResponse, HealthResponse};
         title = "WeMove API",
         description = "REST API for the WeMove application"
     ),
-    paths(super::handlers::hello_world, super::handlers::hello_world_post, super::handlers::health),
-    components(schemas(HelloWorldRequest, HelloWorldResponse, HealthResponse))
+    paths(super::handlers::main_get, super::handlers::main_post, super::handlers::health),
+    components(schemas(MainRequest, MainResponse, HealthResponse))
 )]
 pub struct ApiDoc;

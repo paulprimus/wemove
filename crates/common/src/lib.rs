@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct HelloWorldRequest {
+pub struct MainRequest {
     #[schema(example = json!({"name": "Paul"}))]
     pub name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct HelloWorldResponse {
+pub struct MainResponse {
     #[schema(example = json!("Hello, Paul!"))]
     pub message: String,
 }

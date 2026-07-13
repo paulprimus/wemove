@@ -31,13 +31,13 @@ async fn health_endpoint_returns_healthy() {
 }
 
 #[tokio::test]
-async fn hello_world_get_returns_greeting() {
+async fn main_get_returns_greeting() {
     let app = create_test_app();
 
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/")
+                .uri("/api/main")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -48,11 +48,11 @@ async fn hello_world_get_returns_greeting() {
 
     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["message"], "Hello, World!");
+    assert_eq!(json["message"], "Hello, WeMove!");
 }
 
 #[tokio::test]
-async fn hello_world_post_with_name_returns_personalized_greeting() {
+async fn main_post_with_name_returns_personalized_greeting() {
     let app = create_test_app();
 
     let body = serde_json::json!({ "name": "Alice" });
@@ -60,7 +60,7 @@ async fn hello_world_post_with_name_returns_personalized_greeting() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/")
+                .uri("/api/main")
                 .header("Content-Type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),
@@ -76,7 +76,7 @@ async fn hello_world_post_with_name_returns_personalized_greeting() {
 }
 
 #[tokio::test]
-async fn hello_world_post_without_name_returns_default_greeting() {
+async fn main_post_without_name_returns_default_greeting() {
     let app = create_test_app();
 
     let body = serde_json::json!({});
@@ -84,7 +84,7 @@ async fn hello_world_post_without_name_returns_default_greeting() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/")
+                .uri("/api/main")
                 .header("Content-Type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),

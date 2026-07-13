@@ -26,7 +26,7 @@ pub async fn create_app(state: AppState) -> Router {
     let metrics_handle = setup_metrics_recorder();
 
     Router::new()
-        .route("/api/hello", get(crate::handlers::hello_world).post(crate::handlers::hello_world_post))
+        .route("/api/main", get(crate::handlers::main_get).post(crate::handlers::main_post))
         .route("/api/health", get(crate::handlers::health))
         .route("/metrics", get(metrics_handler))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
