@@ -1,6 +1,7 @@
 use axum::extract::State;
 use axum::Json;
-use common::{HelloWorldRequest, HelloWorldResponse, HealthResponse, AppError};
+use common::{HelloWorldRequest, HelloWorldResponse, HealthResponse};
+use crate::error::ApiError;
 use crate::routes::AppState;
 use metrics::counter;
 use std::time::Instant;
@@ -33,7 +34,7 @@ pub async fn hello_world() -> Json<HelloWorldResponse> {
 pub async fn hello_world_post(
     State(_state): State<AppState>,
     Json(req): Json<HelloWorldRequest>,
-) -> Result<Json<HelloWorldResponse>, AppError> {
+) -> Result<Json<HelloWorldResponse>, ApiError> {
     let start = Instant::now();
     let name = req.name.unwrap_or_else(|| "World".to_string());
     let response = HelloWorldResponse {
