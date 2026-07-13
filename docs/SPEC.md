@@ -23,11 +23,11 @@ wemove/
 ├── docs/
 │   └── SPEC.md             # This specification
 ├── crates/
-│   ├── common/             # Shared types, errors, tracing setup
+│   ├── common/             # Shared types, errors, tracing setup (framework-agnostic, no axum dependency)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
-│   │       ├── error.rs    # Application error types
+│   │       ├── error.rs    # AppError enum (thiserror only, no HTTP mapping)
 │   │       └── tracing.rs  # Tracing setup
 │   ├── config/             # Configuration loading
 │   │   ├── Cargo.toml
@@ -39,13 +39,14 @@ wemove/
 │           ├── main.rs
 │           ├── routes.rs    # Route definitions
 │           ├── handlers.rs # Endpoint handlers (utoipa::path annotations)
+│           ├── error.rs    # ApiError newtype wrapping AppError, impl IntoResponse (HTTP mapping lives here)
 │           └── openapi.rs  # OpenAPI spec (utoipa::OpenApi)
 ├── web/                    # Angular frontend (CSR, standalone components)
 │   ├── angular.json
 │   ├── package.json
 │   ├── proxy.conf.json     # Dev-server proxy to the Rust backend (/api -> :8080)
 │   └── src/
-│       ├── main.ts
+│       ├── main.component.ts
 │       └── app/
 └── tests/
     └── integration_tests.rs
@@ -55,8 +56,11 @@ wemove/
 
 ### common
 - Tracing subscriber initialization
-- Application error types (`thiserror`)
-- Shared DTOs (HelloWorldRequest, HelloWorldResponse)
+- Application error types (`thiserror`), framework-agnostic (kein Axum, kein `anyhow` als
+  Pflicht-Dependency — `AppError::Internal` trägt eine `String`-Message; die Konvertierung
+  aus `anyhow::Error` erfolgt im aufrufenden Code)
+- Shared DTOs (HelloWorldRequest, HelloWorldResponse, HealthResponse), annotiert mit
+  `utoipa::ToSchema` für die OpenAPI-Generierung
 
 ### config
 - Clap CLI argument parsing
@@ -68,6 +72,9 @@ wemove/
 - Middleware (request logging, metrics)
 - Endpoint handlers
 - Health check endpoint
+- `ApiError`-Newtype (`error.rs`), das `common::AppError` in eine HTTP-`Response`
+  übersetzt (`IntoResponse`). Die HTTP-Mapping-Logik lebt bewusst hier und nicht in
+  `common`, um `common` framework-agnostisch zu halten (siehe Orphan-Rule-Hinweis im Code)
 
 ## Configuration
 
@@ -152,6 +159,13 @@ Single Source of Truth ist der Rust-Code – die Spec wird zur Compilezeit gener
 DTOs in `crates/common/src/lib.rs` sind mit `#[derive(ToSchema)]` annotiert.
 Handler in `crates/server/src/handlers.rs` sind mit `#[utoipa::path(...)]` versehen.
 Das `ApiDoc`-Struct in `crates/server/src/openapi.rs` sammelt alle Pfade und Schemas.
+
+### Error-Handling-Pattern
+`common::AppError` ist ein reines `thiserror`-Enum ohne Web-Framework-Bezug (auch mit
+`ToSchema` annotiert, damit Fehlerfälle in der OpenAPI-Spec dokumentiert werden können).
+Die Übersetzung in eine Axum-`Response` übernimmt `server::error::ApiError`, ein
+Newtype-Wrapper mit `impl IntoResponse`. Dadurch bleibt `common` unabhängig von Axum und
+wiederverwendbar für andere Consumer (CLI, andere Web-Layer, Tests).
 
 ### TypeScript-Client (Frontend)
 Im `web/`-Verzeichnis generiert `npm run generate:api` aus der laufenden Spec

@@ -1,0 +1,13 @@
+.json {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-family: Consolas, Menlo, monospace;
+  font-size: 0.875rem;
+}
+
+.error {
+  color: #d32f2f;
+}

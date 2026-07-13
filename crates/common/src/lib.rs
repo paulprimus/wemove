@@ -8,13 +8,13 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct HelloWorldRequest {
-    #[schema(example = json!({"name": "Alice"}))]
+    #[schema(example = json!({"name": "Paul"}))]
     pub name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct HelloWorldResponse {
-    #[schema(example = json!("Hello, Alice!"))]
+    #[schema(example = json!("Hello, Paul!"))]
     pub message: String,
 }
 

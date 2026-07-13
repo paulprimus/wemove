@@ -8,22 +8,23 @@ use std::time::Instant;
 
 #[utoipa::path(
     get,
-    path = "/",
+    path = "/api/hello",
     tag = "hello",
     responses(
         (status = 200, description = "Returns a hello world message", body = HelloWorldResponse)
     )
 )]
 pub async fn hello_world() -> Json<HelloWorldResponse> {
+    tracing::debug!("hello_world called");
     counter!("hello_world_requests_total").increment(1);
     Json(HelloWorldResponse {
-        message: "Hello, World!".to_string(),
+        message: "Hello, WeMove!".to_string(),
     })
 }
 
 #[utoipa::path(
     post,
-    path = "/",
+    path = "/api/hello",
     tag = "hello",
     request_body = HelloWorldRequest,
     responses(
@@ -47,7 +48,7 @@ pub async fn hello_world_post(
 
 #[utoipa::path(
     get,
-    path = "/health",
+    path = "/api/health",
     tag = "health",
     responses(
         (status = 200, description = "Returns the health status", body = HealthResponse)
