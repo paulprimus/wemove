@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 common = { path = "../common" }
 config = { path = "../config" }
+marvels_auth = { package = "marvels_server", path = "C:/dev/projekte/rust/marvels/marvels_server" }
 
 anyhow = { workspace = true }
 axum = { workspace = true }
