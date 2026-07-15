@@ -30,6 +30,39 @@ impl Args {
     }
 }
 
+/// Authentifizierungs-Konfiguration, die ausschließlich über Umgebungsvariablen
+/// (bzw. eine `.env`-Datei) gesetzt werden kann - bewusst kein CLI-Flag, damit
+/// Secrets nicht über Prozessargumente/Shell-History/`--help` sichtbar werden.
+#[derive(Debug, Clone)]
+pub struct AuthConfig {
+    pub jwt_secret: String,
+    pub token_expiry_secs: u64,
+}
+
+impl AuthConfig {
+    /// Lädt die Auth-Konfiguration aus der Umgebung (inkl. `.env`, falls vorhanden).
+    ///
+    /// # Panics
+    /// Falls `JWT_SECRET` nicht gesetzt ist, da ein leerer/Default-Secret in
+    /// Produktion ein Sicherheitsrisiko darstellt.
+    pub fn load() -> Self {
+        dotenvy::dotenv().ok();
+
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .expect("JWT_SECRET muss über die .env-Datei oder als Umgebungsvariable gesetzt werden");
+
+        let token_expiry_secs = std::env::var("TOKEN_EXPIRY_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3600);
+
+        Self {
+            jwt_secret,
+            token_expiry_secs,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

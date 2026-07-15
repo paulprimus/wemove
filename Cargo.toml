@@ -14,10 +14,11 @@ authors = ["WeMove Team"]
 license = "MIT"
 
 [workspace.dependencies]
-marvels_auth = { path = "../marvels/server" }
+marvels_auth = { path = "../marvels/marvels_server", package = "marvels_server" }
+proto = { path = "../marvels/proto" }
 anyhow = "1.0"
 axum = "0.8"
-tower = "0.5"
+tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 dotenvy = "0.15"
@@ -29,7 +30,7 @@ thiserror = "2.0"
 tokio = { version = "1.40", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-utoipa = "4"
+utoipa = "5"
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 
 [profile.release]
