@@ -1,6 +1,6 @@
 use utoipa::OpenApi;
 use common::{MainRequest, MainResponse, HealthResponse};
-use crate::auth_proxy::{TokenRequest, TokenResponse, TokenErrorResponse};
+use marvels_auth::rest::{JsonTokenRequest, JsonTokenResponse, JsonErrorResponse};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -12,8 +12,8 @@ use crate::auth_proxy::{TokenRequest, TokenResponse, TokenErrorResponse};
         super::handlers::main_get,
         super::handlers::main_post,
         super::handlers::health,
-        super::auth_proxy::token
+        super::auth_rest::token
     ),
-    components(schemas(MainRequest, MainResponse, HealthResponse, TokenRequest, TokenResponse, TokenErrorResponse))
+    components(schemas(MainRequest, MainResponse, HealthResponse, JsonTokenRequest, JsonTokenResponse, JsonErrorResponse))
 )]
 pub struct ApiDoc;

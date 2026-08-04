@@ -1,4 +1,4 @@
-mod auth_proxy;
+mod auth_rest;
 mod error;
 mod handlers;
 mod openapi;

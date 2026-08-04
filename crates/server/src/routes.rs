@@ -33,7 +33,7 @@ pub async fn create_app(state: AppState, jwt_secret: impl AsRef<[u8]>, token_exp
     Router::new()
         .route("/api/main", get(crate::handlers::main_get).post(crate::handlers::main_post))
         .route("/api/health", get(crate::handlers::health))
-        .route("/api/auth/token", axum::routing::post(crate::auth_proxy::token))
+        .route("/api/auth/token", axum::routing::post(crate::auth_rest::token))
         .route("/metrics", get(metrics_handler))
         .nest_service("/auth", auth_router.clone())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))

@@ -1,0 +1,31 @@
+@baseUrl = http://127.0.0.1:3000
+
+### Client Credentials Flow
+POST {{baseUrl}}/api/auth/token
+Content-Type: application/json
+
+{
+  "client_id": "test-client",
+  "client_secret": "test-secret",
+  "scope": "read write"
+}
+
+### Authenticate (Protobuf-Endpunkt - nur für PKCE-Flow)
+POST {{baseUrl}}/auth/authenticate
+Content-Type: application/protobuf
+
+# AuthenticateRequest als Hex-encoding
+# Nicht direkt aufrufbar aus Browser/CLI
+
+### Protected Resource (erfordert Bearer Token)
+GET {{baseUrl}}/auth/protected
+Authorization: Bearer <access_token>
+
+### Health Check
+GET {{baseUrl}}/api/health
+
+### Swagger UI
+GET {{baseUrl}}/swagger-ui
+
+### Metrics
+GET {{baseUrl}}/metrics
