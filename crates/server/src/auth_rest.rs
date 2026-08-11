@@ -3,7 +3,7 @@ use axum::{
     response::Response,
     Json,
 };
-use marvels_auth::rest::{JsonTokenRequest, JsonTokenResponse, JsonErrorResponse};
+use marvels_auth::rest::{JsonErrorResponse, JsonTokenRequest, JsonTokenResponse};
 
 pub use marvels_auth::AppState;
 

@@ -8,11 +8,13 @@ license.workspace = true
 [dependencies]
 common = { path = "../common" }
 config = { path = "../config" }
+web = { path = "../web" }
 marvels_auth = { workspace = true }
 proto = { workspace = true }
 
 anyhow = { workspace = true }
 axum = { workspace = true }
+topcoat = { workspace = true }
 metrics = { workspace = true }
 metrics-exporter-prometheus = { workspace= true }
 serde = { workspace = true }

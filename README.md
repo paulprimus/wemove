@@ -1,6 +1,6 @@
 # WeMove
 
-Web application with Rust/Axum backend and Angular frontend.
+Web application with a Topcoat frontend and Axum REST backend.
 
 ## Quick Start
 
@@ -17,15 +17,14 @@ cargo run --package server -- --host 0.0.0.0 --port 3000 --log-level debug
 cargo test --workspace
 ```
 
-### Frontend
+### Web application
 
 ```bash
-cd web
-npm install
-npm start
+cargo run --package server
 ```
 
-Frontend wird unter `http://localhost:4200` bereitgestellt und leitet `/api/*` Requests an den Backend-Server auf Port 8080 weiter.
+Topcoat rendert die Weboberfläche zusammen mit dem Server unter
+`http://localhost:8080`. Die Axum-API bleibt unter `/api/*` verfügbar.
 
 ## Endpoints
 
@@ -44,8 +43,8 @@ wemove/
 ├── crates/
 │   ├── common/         # Shared: tracing, error types
 │   ├── config/         # CLI + env config
-│   └── server/         # Axum HTTP server
-├── web/                # Angular frontend
+│   ├── server/         # Axum API und Topcoat-Server
+│   └── web/            # Topcoat-Seiten und Komponenten
 ├── tests/              # Integration tests
 └── docs/SPEC.md        # Detailed specification
 ```
@@ -57,7 +56,7 @@ wemove/
 | Backend | Rust, Tokio, Axum |
 | Config | Clap, dotenvy |
 | Monitoring | metrics, prometheus |
-| Frontend | Angular 22 |
+| Frontend | Rust, Topcoat |
 | Logging | tracing, tracing-subscriber |
 
 ## Konfiguration

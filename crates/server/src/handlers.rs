@@ -1,8 +1,8 @@
-use axum::extract::State;
-use axum::Json;
-use common::{MainRequest, MainResponse, HealthResponse};
 use crate::error::ApiError;
 use crate::routes::AppState;
+use axum::extract::State;
+use axum::Json;
+use common::{HealthResponse, MainRequest, MainResponse};
 use metrics::counter;
 use std::time::Instant;
 
