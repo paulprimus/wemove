@@ -1,6 +1,8 @@
 use common::{HealthResponse, MainRequest, MainResponse};
-use marvels_auth::rest::{JsonErrorResponse, JsonTokenRequest, JsonTokenResponse};
+use marvels_auth::rest::{JsonErrorResponse, JsonTokenRequest};
 use utoipa::OpenApi;
+
+use super::auth_rest::TokenResponse;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -19,7 +21,7 @@ use utoipa::OpenApi;
         MainResponse,
         HealthResponse,
         JsonTokenRequest,
-        JsonTokenResponse,
+        TokenResponse,
         JsonErrorResponse
     ))
 )]

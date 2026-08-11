@@ -528,7 +528,6 @@ dependencies = [
 [[package]]
 name = "core"
 version = "0.1.0"
-source = "git+https://github.com/paulprimus/marvels.git?branch=main#d25b3b075a7528e12d103954b7bfeb7b9ebc56e7"
 dependencies = [
  "thiserror",
 ]
@@ -1602,7 +1601,6 @@ dependencies = [
 [[package]]
 name = "marvels_auth"
 version = "0.1.0"
-source = "git+https://github.com/paulprimus/marvels.git?branch=main#d25b3b075a7528e12d103954b7bfeb7b9ebc56e7"
 dependencies = [
  "axum",
  "axum-extra",
@@ -1612,14 +1610,15 @@ dependencies = [
  "dashmap",
  "jsonwebtoken",
  "log",
- "proto",
+ "proto 0.1.0",
  "rustls",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.10.9",
  "thiserror",
  "tokio",
  "tracing-subscriber",
+ "utoipa",
  "uuid",
 ]
 
@@ -2075,7 +2074,16 @@ dependencies = [
 [[package]]
 name = "proto"
 version = "0.1.0"
-source = "git+https://github.com/paulprimus/marvels.git?branch=main#d25b3b075a7528e12d103954b7bfeb7b9ebc56e7"
+dependencies = [
+ "prost",
+ "prost-build",
+ "prost-types",
+]
+
+[[package]]
+name = "proto"
+version = "0.1.0"
+source = "git+https://github.com/paulprimus/marvels.git?branch=main#9f5136ae43127de4abbc631cac448f0fca492878"
 dependencies = [
  "prost",
  "prost-build",
@@ -2589,7 +2597,7 @@ dependencies = [
  "marvels_auth",
  "metrics",
  "metrics-exporter-prometheus",
- "proto",
+ "proto 0.1.0 (git+https://github.com/paulprimus/marvels.git?branch=main)",
  "serde",
  "serde_json",
  "tokio",

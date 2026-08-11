@@ -14,13 +14,13 @@ Das System implementiert einen OAuth 2.1-kompatiblen Auth-Server mit zwei mögli
 │                          WeMove Server                                  │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                      routes.rs                                    │  │
-│  │  POST /api/auth/token  →  auth_proxy.rs (JSON→Protobuf Proxy)   │  │
-│  │  /auth/*              →  marvels_auth Router (Protobuf)         │  │
+│  │  POST /api/auth/token  →  auth_rest.rs (marvels_auth::rest)     │  │
+│  │  /auth/*              →  marvels_auth Router                    │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                      │                                   │
 │                                      ▼                                   │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                      marvels_auth (Library)                      │  │
+│  │                      marvels_auth (Library)                       │  │
 │  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐         │  │
 │  │  │ /authenticate │  │  /authorize   │  │  /protected   │         │  │
 │  │  └───────────────┘  └───────────────┘  └───────────────┘         │  │
@@ -35,7 +35,7 @@ Client                    Server                          marvels_auth
   │                          │                                  │
   │──POST /api/auth/token───▶│                                  │
   │  {client_id, client_secret}                                  │
-  │                          │──Protobuf /authorize────────────▶│
+  │                          │──JSON /token────────────────────▶│
   │                          │  {grant_type: "client_credentials"} │
   │                          │                                  │
   │                          │◀──JWT Access Token──────────────│
@@ -44,7 +44,7 @@ Client                    Server                          marvels_auth
 
 **Verwendungszweck**: Direkte Authentifizierung mit Client-ID/Secret, kein User-Auth.
 
-**Request** (`crates/server/src/auth_proxy.rs:25-31`):
+**Request** (`crates/server/src/auth_rest.rs:22-26`):
 ```json
 {
   "client_id": "mein-client",
@@ -85,12 +85,12 @@ Client                    Server                          marvels_auth
 
 **Endpoint**: `POST /auth/authenticate` (Protobuf)
 
-**Request** (`proto/authentication/security.proto`):
+**Request** (Protobuf):
 - `client_id`: Client-Identifier
 - `code_challenge`: BASE64URL(SHA256(code_verifier))
 - `code_challenge_method`: muss "S256" sein
 
-**Verarbeitung** (`marvels_server/src/server.rs:15-51`):
+**Verarbeitung** (`marvels_auth` crate):
 1. Validiert `code_challenge_method` (nur S256 erlaubt)
 2. Generiert UUID als Authorization Code
 3. Speichert in-memory: `{auth_code → AuthCodeEntry{client_id, code_challenge}}`
@@ -107,7 +107,7 @@ Client                    Server                          marvels_auth
 - `code`: Authorization Code aus Schritt 1
 - `code_verifier`: PKCE Verifier
 
-**Verarbeitung** (`marvels_server/src/server.rs:53-122`):
+**Verarbeitung** (`marvels_auth` crate):
 1. Entfernt Auth-Code aus Store (einmalige Verwendung)
 2. Verifiziert PKCE: `BASE64URL(SHA256(code_verifier)) == code_challenge`
 3. Generiert JWT Access Token
@@ -118,14 +118,14 @@ Client                    Server                          marvels_auth
 
 **Header**: `Authorization: Bearer <access_token>`
 
-**Verarbeitung** (`marvels_server/src/server.rs:174-202`):
+**Verarbeitung** (`marvels_auth` crate):
 1. Extrahiert Bearer Token aus Header
 2. Validiert JWT-Signatur mit HS256
 3. Gibt geschützte Ressource zurück
 
 ## JWT Token Struktur
 
-**Claims** (`marvels_server/src/token.rs:5-11`):
+**Claims** (`marvels_auth` crate):
 ```json
 {
   "sub": "client_id",
@@ -139,7 +139,7 @@ Client                    Server                          marvels_auth
 
 ## PKCE Verifikation
 
-**Implementierung** (`marvels_server/src/authentication.rs:14-24`):
+**Implementierung** (`marvels_auth` crate):
 
 ```rust
 pub fn verify_pkce(code_verifier: &str, code_challenge: &str) -> bool {
@@ -157,7 +157,7 @@ pub fn verify_pkce(code_verifier: &str, code_challenge: &str) -> bool {
 
 | Pfad | Methode | Protokoll | Beschreibung |
 |------|---------|-----------|--------------|
-| `/api/auth/token` | POST | JSON | Client Credentials (Proxy) |
+| `/api/auth/token` | POST | JSON | Client Credentials (via marvels_auth) |
 | `/auth/authenticate` | POST | Protobuf | Auth-Code anfordern |
 | `/auth/authorize` | POST | Protobuf | Token austauschen |
 | `/auth/protected` | GET | - | Geschützte Ressource |

@@ -14,7 +14,7 @@ authors = ["WeMove Team"]
 license = "MIT"
 
 [workspace.dependencies]
-marvels_auth = { git = "https://github.com/paulprimus/marvels.git", branch = "main" }
+marvels_auth = { path = "../marvels/marvels_auth" }
 proto = { git = "https://github.com/paulprimus/marvels.git", package = "proto", branch = "main" }
 anyhow = "1.0"
 axum = "0.8"

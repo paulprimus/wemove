@@ -25,10 +25,14 @@ pub async fn create_app(
 ) -> Router {
     let metrics_handle = setup_metrics_recorder();
 
+    let jwt_secret_vec = jwt_secret.as_ref().to_vec();
+
     let auth_router = marvels_auth::AuthRouterBuilder::new()
-        .jwt_secret(jwt_secret)
+        .jwt_secret(&jwt_secret_vec)
         .token_expiry(token_expiry_secs)
         .build();
+
+    let auth_state = marvels_auth::AppState::new(jwt_secret_vec, token_expiry_secs);
 
     Router::new()
         .route(
@@ -46,5 +50,6 @@ pub async fn create_app(
         .layer(TraceLayer::new_for_http())
         .layer(Extension(metrics_handle))
         .layer(Extension(auth_router))
+        .layer(Extension(auth_state))
         .with_state(state)
 }
