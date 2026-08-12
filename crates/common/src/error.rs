@@ -1,6 +1,21 @@
 use thiserror::Error;
 use utoipa::ToSchema;
 
+#[derive(Error, Debug, ToSchema)]
+pub enum DbError {
+    #[error("Database connection error: {0}")]
+    Connection(String),
+
+    #[error("Database query error: {0}")]
+    Query(String),
+
+    #[error("Database constraint violation: {0}")]
+    Constraint(String),
+
+    #[error("Password hashing error: {0}")]
+    PasswordHash(String),
+}
+
 /// Framework-agnostisches Fehler-Enum. Die Übersetzung in eine konkrete
 /// HTTP-Response (z. B. via `axum::response::IntoResponse`) obliegt dem
 /// jeweiligen Web-Layer (siehe `server`-Crate), damit `common` nicht an
@@ -20,4 +35,13 @@ pub enum AppError {
 
     #[error("Not found: {0}")]
     NotFound(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error("Database error: {0}")]
+    Database(#[from] DbError),
 }

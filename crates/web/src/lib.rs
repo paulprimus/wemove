@@ -1,29 +1,14 @@
-use topcoat::{
-    router::{page, RouterBuilder},
-    view::view,
-    Result,
-};
+pub mod app;
+pub mod auth;
+pub mod home;
 
-#[page("/")]
-pub async fn home() -> Result {
-    view! {
-        <!DOCTYPE html>
-        <html lang="en">
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>"WeMove"</title>
-            </head>
-            <body>
-                <main>
-                    <h1>"WeMove"</h1>
-                    <p>"Welcome to the WeMove application."</p>
-                </main>
-            </body>
-        </html>
-    }
-}
+use topcoat::router::RouterBuilder;
+
+use crate::app::app_layout;
+use crate::auth::login::login;
+use crate::auth::register::register as register_page;
+use crate::home::index;
 
 pub fn register(builder: RouterBuilder) -> RouterBuilder {
-    builder.page(home)
+    builder.layout(app_layout).page(index).page(login).page(register_page)
 }

@@ -19,6 +19,8 @@ proto = { git = "https://github.com/paulprimus/marvels.git", package = "proto", 
 anyhow = "1.0"
 axum = "0.8"
 topcoat = { version = "0.5", features = ["router", "tower", "view"] }
+turso = { version = "0.7" }
+bcrypt = "0.16"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace"] }
 clap = { version = "4.5", features = ["derive", "env"] }

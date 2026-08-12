@@ -4,9 +4,11 @@ mod handlers;
 mod openapi;
 mod routes;
 mod state;
+mod user_repo;
 
 use common::tracing as common_tracing;
 use config::{Args, AuthConfig};
+use state::AppState;
 use tokio::net::TcpListener;
 use topcoat::serve;
 use tracing;
@@ -21,9 +23,9 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Starting server on {}", addr);
 
-    let state = routes::AppState::default();
+    let state = AppState::new().await?;
     let api = routes::create_app(
-        state,
+        state.clone(),
         auth_config.jwt_secret.as_bytes(),
         auth_config.token_expiry_secs,
     )

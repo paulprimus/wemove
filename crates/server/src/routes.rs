@@ -44,6 +44,14 @@ pub async fn create_app(
             "/api/auth/token",
             axum::routing::post(crate::auth_rest::token),
         )
+        .route(
+            "/api/auth/login",
+            axum::routing::post(crate::auth_rest::login),
+        )
+        .route(
+            "/auth/register",
+            axum::routing::post(crate::auth_rest::register),
+        )
         .route("/metrics", get(metrics_handler))
         .nest_service("/auth", auth_router.clone())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
@@ -51,5 +59,6 @@ pub async fn create_app(
         .layer(Extension(metrics_handle))
         .layer(Extension(auth_router))
         .layer(Extension(auth_state))
+        .layer(Extension(state.clone()))
         .with_state(state)
 }

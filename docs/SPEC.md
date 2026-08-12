@@ -2,14 +2,15 @@
 
 ## Overview
 
-A web application built with Tokio, Axum, and Clap providing a Main endpoint with health check.
+A full-stack web application built with Tokio, Axum, Topcoat, and Clap providing a Main endpoint with health check.
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
 | Runtime | Tokio |
-| Web Framework | Axum |
+| Web Framework | Axum (server) |
+| Frontend Framework | Topcoat (SSR, full-stack Rust) |
 | CLI | Clap |
 | Logging | Tracing |
 | Configuration | Clap + Env (.env) |
@@ -23,7 +24,7 @@ wemove/
 ├── docs/
 │   └── SPEC.md             # This specification
 ├── crates/
-│   ├── common/             # Shared types, errors, tracing setup (framework-agnostic, no axum dependency)
+│   ├── common/             # Shared types, errors, tracing setup (framework-agnostic)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
@@ -33,21 +34,23 @@ wemove/
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       └── lib.rs      # CLI + env config
-│   └── server/             # Axum HTTP server
+│   ├── server/             # Axum HTTP server
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── main.rs
+│   │       ├── routes.rs    # Route definitions
+│   │       ├── handlers.rs # Endpoint handlers (utoipa::path annotations)
+│   │       ├── error.rs    # ApiError newtype wrapping AppError, impl IntoResponse
+│   │       ├── openapi.rs  # OpenAPI spec (utoipa::OpenApi)
+│   │       └── auth_rest.rs
+│   ├── web/                # Topcoat full-stack frontend (SSR)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── lib.rs      # Pages and components (registered via topcoat)
+│   └── web-server/         # Optional: dedicated Topcoat web server (standalone dev)
 │       ├── Cargo.toml
 │       └── src/
-│           ├── main.rs
-│           ├── routes.rs    # Route definitions
-│           ├── handlers.rs # Endpoint handlers (utoipa::path annotations)
-│           ├── error.rs    # ApiError newtype wrapping AppError, impl IntoResponse (HTTP mapping lives here)
-│           └── openapi.rs  # OpenAPI spec (utoipa::OpenApi)
-├── web/                    # Angular frontend (CSR, standalone components)
-│   ├── angular.json
-│   ├── package.json
-│   ├── proxy.conf.json     # Dev-server proxy to the Rust backend (/api -> :8080)
-│   └── src/
-│       ├── main.component.ts
-│       └── app/
+│           └── main.rs
 └── tests/
     └── integration_tests.rs
 ```
@@ -75,6 +78,15 @@ wemove/
 - `ApiError`-Newtype (`error.rs`), das `common::AppError` in eine HTTP-`Response`
   übersetzt (`IntoResponse`). Die HTTP-Mapping-Logik lebt bewusst hier und nicht in
   `common`, um `common` framework-agnostisch zu halten (siehe Orphan-Rule-Hinweis im Code)
+
+### web
+- [Topcoat](https://github.com/tokio-rs/topcoat) full-stack frontend
+- Server-Side Rendering (SSR) mit dem `view!`-Makro
+- Pages (`#[page]`) und Components (`#[component]`) in `lib.rs`
+- Client-Reactivity via `$(...)`-Expressions (Rust + JS)
+- Routing via Topcoat Router (`RouterBuilder`), module-based routing möglich
+- Pages werden über `register()` im `RouterBuilder` registriert
+- Optional integrierbar in den Axum-Server oder als eigenständiger Server
 
 ## Configuration
 
@@ -167,9 +179,9 @@ Die Übersetzung in eine Axum-`Response` übernimmt `server::error::ApiError`, e
 Newtype-Wrapper mit `impl IntoResponse`. Dadurch bleibt `common` unabhängig von Axum und
 wiederverwendbar für andere Consumer (CLI, andere Web-Layer, Tests).
 
-### TypeScript-Client (Frontend)
-Im `web/`-Verzeichnis generiert `npm run generate:api` aus der laufenden Spec
-einen TypeScript-Client nach `web/src/app/api/`. Das generierte Verzeichnis ist in `.gitignore`.
+### Topcoat Frontend
+Das Frontend ist ein Rust-Crate (`crates/web`) – kein separater TypeScript-Client nötig.
+Pages und Components sind typsicherer Rust-Code, der direkt auf dem Server rendert.
 
 ## Testing
 
@@ -204,6 +216,10 @@ Each crate contains unit tests for its components.
 - `utoipa`
 - `utoipa-swagger-ui` (axum feature)
 
+### web
+- `topcoat`
+- `tokio`
+
 ## Usage
 
 ### Run
@@ -229,28 +245,26 @@ cargo run --package server
 cargo test --workspace
 ```
 
-## Frontend (web/)
+## Frontend (crates/web)
 
-Angular application (client-side rendering, standalone components, routing enabled).
+[Topcoat](https://github.com/tokio-rs/topcoat) full-stack frontend mit Server-Side Rendering.
 
-### Run dev server
+### Struktur
+
+- `crates/web/src/lib.rs`: Pages und Components, registriert via `register()`
+- Pages mit `#[page("/path")]`
+- Components mit `#[component]`
+
+### Run
+
 ```bash
-cd web
-npm start
+cargo run --package web-server
 ```
-Runs `ng serve` with `proxy.conf.json`, forwarding requests under `/api/*` to the
-Rust backend at `http://127.0.0.1:8080` (prefix stripped). Start the backend
-separately with `cargo run --package server`.
+oder via Topcoat CLI (`topcoat run`).
 
-### Build for production
+### Topcoat CLI
 ```bash
-cd web
-npm run build
-```
-Output is written to `web/dist/web`.
-
-### Test
-```bash
-cd web
-npm test
+cargo install topcoat-cli
+topcoat fmt      # Formatiert view!-Makros
+topcoat ui       # Kopiert UI-Komponenten ins Projekt
 ```

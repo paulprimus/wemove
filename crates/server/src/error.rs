@@ -27,6 +27,12 @@ impl IntoResponse for ApiError {
             }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            AppError::Database(db_err) => {
+                tracing::error!("Database error: {}", db_err);
+                (StatusCode::INTERNAL_SERVER_ERROR, db_err.to_string())
+            }
         };
 
         let body = Json(json!({
