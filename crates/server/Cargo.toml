@@ -9,9 +9,9 @@ license.workspace = true
 common = { path = "../common" }
 config = { path = "../config" }
 web = { path = "../web" }
-marvels_auth = { workspace = true }
 turso = { workspace = true }
 bcrypt = { workspace = true }
+jsonwebtoken = { workspace = true }
 
 anyhow = { workspace = true }
 axum = { workspace = true }

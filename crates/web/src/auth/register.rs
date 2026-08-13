@@ -9,7 +9,7 @@ pub async fn register() -> Result {
                     <div class="card shadow">
                         <div class="card-body p-4">
                             <h1 class="h3 mb-4 fw-normal text-center">"Sign Up"</h1>
-                            <form method="post" action="/auth/register">
+                            <form method="post" action="/api/auth/register">
                                 <div class="mb-3">
                                     <label for="name" class="form-label">"Name"</label>
                                     <input type="text" class="form-control" id="name" name="name" required="" placeholder="Your name">

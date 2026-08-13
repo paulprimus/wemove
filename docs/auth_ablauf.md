@@ -2,10 +2,12 @@
 
 ## Übersicht
 
-Das System implementiert einen OAuth 2.1-kompatiblen Auth-Server mit zwei möglichen Flows:
+Das System implementiert einen OAuth 2.1-kompatiblen Auth-Server mit drei Flows:
 
-1. **Client Credentials Flow** - für direkte Service-zu-Service-Kommunikation
-2. **Authorization Code Flow mit PKCE** - für Benutzer-/Client-Authentifizierung
+1. **User Login** — Email/Password-Auth mit DB-Abfrage und JWT-Token
+2. **User Registration** — Neuen User anlegen mit bcrypt-Passwort-Hashing
+3. **Client Credentials Flow** — Token-Generierung ohne User-Auth
+4. **Authorization Code Flow mit PKCE** — sicherer Flow für Benutzer-Auth
 
 ## Architektur
 
@@ -14,46 +16,130 @@ Das System implementiert einen OAuth 2.1-kompatiblen Auth-Server mit zwei mögli
 │                          WeMove Server                                  │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                      routes.rs                                    │  │
-│  │  POST /api/auth/token  →  auth_rest.rs (marvels_auth::rest)     │  │
-│  │  /auth/*              →  marvels_auth Router                    │  │
+│  │  POST /api/auth/login      →  auth_rest.rs (User-Login)          │  │
+│  │  POST /api/auth/token      →  auth_rest.rs (Client Credentials)  │  │
+│  │  POST /api/auth/register   →  auth_rest.rs (User-Registrierung)  │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                      │                                   │
 │                                      ▼                                   │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                      marvels_auth (Library)                       │  │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐         │  │
-│  │  │ /authenticate │  │  /authorize   │  │  /protected   │         │  │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘         │  │
+│  │  AppState::create_access_token() — JWT-Erstellung (HS256)        │  │
+│  │  verify_pkce() — PKCE-Verifikation (timing-sicher)               │  │
+│  │  DTOs: JsonTokenRequest, JsonErrorResponse                        │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                      │                                   │
+│                                      ▼                                   │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │                      SQLite (Turso)                               │  │
+│  │  users: id, email, name, password_hash, created_at                 │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Flow 1: Client Credentials (einfacher)
+## Flow 1: User Login
+
+```
+Client                    Server                          SQLite (Turso)
+  │                          │                                    │
+  │──POST /api/auth/login───▶│                                    │
+  │  email, password (Form)  │                                    │
+  │                          │──SELECT ... WHERE email=?─────────▶│
+  │                          │◀─User{...password_hash}───────────│
+  │                          │──bcrypt::verify()─────────────────▶│
+  │                          │                                    │
+  │                          │──JWT (create_access_token)─────────│
+  │◀─{success, token}────────│                                    │
+```
+
+**Request** (`crates/server/src/auth_rest.rs:138`):
+```
+POST /api/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+email=alice@example.com&password=geheim
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+**Verarbeitung** (`crates/server/src/auth_rest.rs:138` + `crates/server/src/user_repo.rs`):
+1. `UserRepository::find_by_email(email)` → lädt User mit `password_hash` aus DB
+2. `UserRepository::verify_password()` → `bcrypt::verify(password, hash)` → `Result<bool, ...>`
+3. Bei Erfolg: `marvels_auth::AppState::create_access_token(email, "read write")` → JWT
+
+**Fehler:**
+| Fall | Status | Message |
+|---|---|---|
+| Email nicht gefunden | 401 | "Invalid email or password" |
+| Falsches Passwort | 401 | "Invalid email or password" |
+| DB-Fehler | 500 | "Database error" |
+
+## Flow 2: User Registration
+
+```
+Client                    Server                          SQLite (Turso)
+  │                          │                                    │
+  │──POST /auth/register────▶│                                    │
+  │  name, email, password   │                                    │
+  │  (Form)                   │                                    │
+  │                          │──bcrypt::hash(password, DEFAULT)───▶│
+  │                          │──INSERT INTO users ...─────────────▶│
+  │◀─{success, user_id}──────│                                    │
+```
+
+**Request** (`crates/server/src/auth_rest.rs:209`):
+```
+POST /auth/register
+Content-Type: application/x-www-form-urlencoded
+
+name=Alice&email=alice@example.com&password=geheim
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Registration successful",
+  "user_id": 1
+}
+```
+
+**Verarbeitung** (`crates/server/src/auth_rest.rs:209` + `crates/server/src/user_repo.rs:90`):
+1. Validierung: name, email, password dürfen nicht leer sein
+2. `bcrypt::hash(password, DEFAULT_COST)` → `password_hash` (bcrypt cost = 12)
+3. `UserRepository::create(CreateUser{...})` → `INSERT INTO users`
+4. UNIQUE-Constraint auf `email` → `AppError::Conflict`
+
+## Flow 3: Client Credentials
 
 ```
 Client                    Server                          marvels_auth
   │                          │                                  │
   │──POST /api/auth/token───▶│                                  │
-  │  {client_id, client_secret}                                  │
-  │                          │──JSON /token────────────────────▶│
-  │                          │  {grant_type: "client_credentials"} │
-  │                          │                                  │
-  │                          │◀──JWT Access Token──────────────│
+  │  {client_id, scope?}     │                                  │
+  │  (JSON)                   │                                  │
+  │                          │──JWT (create_access_token)────────│
   │◀─{access_token, ...}────│                                  │
 ```
 
-**Verwendungszweck**: Direkte Authentifizierung mit Client-ID/Secret, kein User-Auth.
+**Verwendungszweck**: Direkte Authentifizierung mit Client-ID, kein User-Auth.
 
-**Request** (`crates/server/src/auth_rest.rs:22-26`):
+**Request** (`crates/server/src/auth_rest.rs:36`):
 ```json
 {
   "client_id": "mein-client",
-  "client_secret": "geheim",
   "scope": "read write"
 }
 ```
 
-**Response**:
+**Response (200):**
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiJ9...",
@@ -63,83 +149,53 @@ Client                    Server                          marvels_auth
 }
 ```
 
-## Flow 2: Authorization Code mit PKCE (sicherer)
+> **Sicherheitshinweis**: Der `client_secret`-Wert aus der Request wird akzeptiert
+> aber aktuell **nicht validiert**. Dies ist eine bekannte Lücke.
 
+## Flow 4: PKCE-Funktionalität (Bibliothek, keine HTTP-Routen)
+
+Der Authorization Code + PKCE Flow ist **nicht** als HTTP-Routen implementiert.
+Die `marvels_auth`-Bibliothek stellt jedoch die Bausteine bereit, die bei Bedarf
+als Routen im server-Crate zusammengeführt werden können:
+
+### `verify_pkce()`
+
+**Implementierung** (`marvels_auth::authentication::verify_pkce`):
+
+```rust
+pub fn verify_pkce(code_verifier: &str, code_challenge: &str) -> bool {
+    let hash = Sha256::digest(code_verifier.as_bytes());
+    let computed = URL_SAFE_NO_PAD.encode(hash);
+    constant_time_eq(&computed, code_challenge)
+}
 ```
-Client                    Server                          marvels_auth
-  │                          │                                  │
-  │                          │◀─POST /authenticate─────────────│
-  │                          │  {client_id, code_challenge}    │
-  │                          │                                  │
-  │                          │◀─Auth-Code (UUID)───────────────│
-  │◀─Auth-Code───────────────│                                  │
-  │                          │                                  │
-  │                          │◀─POST /authorize────────────────│
-  │                          │  {code, code_verifier}          │
-  │                          │                                  │
-  │                          │◀─JWT Access Token───────────────│
-  │◀─{access_token, ...}─────│                                  │
-```
 
-### Schritt 1: Authentifizieren (`/authenticate`)
+- Verwendet SHA-256 Hash
+- Base64URL-Encoding ohne Padding
+- Timing-sicherer Vergleich (verhindert Timing-Angriffe)
 
-**Endpoint**: `POST /auth/authenticate` (Protobuf)
+### `AppState::create_access_token()`
 
-**Request** (Protobuf):
-- `client_id`: Client-Identifier
-- `code_challenge`: BASE64URL(SHA256(code_verifier))
-- `code_challenge_method`: muss "S256" sein
-
-**Verarbeitung** (`marvels_auth` crate):
-1. Validiert `code_challenge_method` (nur S256 erlaubt)
-2. Generiert UUID als Authorization Code
-3. Speichert in-memory: `{auth_code → AuthCodeEntry{client_id, code_challenge}}`
-
-**Response**:
-- `subject`: Authorization Code (UUID)
-
-### Schritt 2: Autorisieren (`/authorize`)
-
-**Endpoint**: `POST /auth/authorize` (Protobuf)
-
-**Request**:
-- `grant_type`: "authorization_code"
-- `code`: Authorization Code aus Schritt 1
-- `code_verifier`: PKCE Verifier
-
-**Verarbeitung** (`marvels_auth` crate):
-1. Entfernt Auth-Code aus Store (einmalige Verwendung)
-2. Verifiziert PKCE: `BASE64URL(SHA256(code_verifier)) == code_challenge`
-3. Generiert JWT Access Token
-
-### Schritt 3: Geschützte Ressource (`/protected`)
-
-**Endpoint**: `GET /auth/protected`
-
-**Header**: `Authorization: Bearer <access_token>`
-
-**Verarbeitung** (`marvels_auth` crate):
-1. Extrahiert Bearer Token aus Header
-2. Validiert JWT-Signatur mit HS256
-3. Gibt geschützte Ressource zurück
+Generiert ein JWT (HS256) mit Claims: `sub`, `scope`, `iat`, `exp`. Kann für
+jeden Auth-Flow verwendet werden.
 
 ## JWT Token Struktur
 
-**Claims** (`marvels_auth` crate):
+**Claims** (`crates/server/src/auth_rest.rs:17-22`):
 ```json
 {
-  "sub": "client_id",
+  "sub": "client_id oder email",
   "scope": "read write",
   "exp": 1234567890,
   "iat": 1234567890
 }
 ```
 
-**Algorithmus**: HS256 (HMAC mit SHA-256)
+**Algorithmus**: HS256 (HMAC mit SHA-256) via `jsonwebtoken`-Crate in `marvels_auth`
 
 ## PKCE Verifikation
 
-**Implementierung** (`marvels_auth` crate):
+**Implementierung** (`../marvels/marvels_auth/src/authentication.rs`):
 
 ```rust
 pub fn verify_pkce(code_verifier: &str, code_challenge: &str) -> bool {
@@ -155,26 +211,65 @@ pub fn verify_pkce(code_verifier: &str, code_challenge: &str) -> bool {
 
 ## Endpunkte Übersicht
 
-| Pfad | Methode | Protokoll | Beschreibung |
-|------|---------|-----------|--------------|
-| `/api/auth/token` | POST | JSON | Client Credentials (via marvels_auth) |
-| `/auth/authenticate` | POST | Protobuf | Auth-Code anfordern |
-| `/auth/authorize` | POST | Protobuf | Token austauschen |
-| `/auth/protected` | GET | - | Geschützte Ressource |
+Alle HTTP-Routen werden im server-Crate definiert. marvels_auth exponiert keine eigenen Routen.
+
+| Pfad | Methode | Input | Beschreibung |
+|------|---------|-------|--------------|
+| `/api/auth/login` | POST | Form | User-Login mit Email/Passwort |
+| `/api/auth/token` | POST | JSON | Client Credentials Token |
+| `/api/auth/register` | POST | Form | User-Registrierung |
 
 ## Fehlerbehandlung
 
-| Fehler | HTTP Status | Beschreibung |
-|--------|-------------|--------------|
-| `invalid_request` | 400 | Ungültige PKCE-Methode |
-| `invalid_grant` | 401 | Ungültiger Auth-Code oder PKCE-Fehler |
-| `unsupported_grant_type` | 400 | Unbekannter Grant Type |
-| `server_error` | 502 | Interne Fehler |
+### Framework-agnostisch (`common/src/error.rs`)
+
+```rust
+pub enum AppError {
+    Internal(String),      // 500 + logging
+    BadRequest(String),    // 400
+    NotFound(String),      // 404
+    Unauthorized(String),  // 401
+    Conflict(String),      // 409
+    Database(#[from] DbError), // 500 + logging
+}
+
+pub enum DbError {
+    Connection(String),
+    Query(String),
+    Constraint(String),
+    PasswordHash(String),
+}
+```
+
+### HTTP-Mapping (`crates/server/src/error.rs`)
+
+| AppError | HTTP Status | Logging |
+|---|---|---|
+| `Internal` | 500 | ✅ |
+| `BadRequest` | 400 | ❌ |
+| `NotFound` | 404 | ❌ |
+| `Unauthorized` | 401 | ❌ |
+| `Conflict` | 409 | ❌ |
+| `Database` | 500 | ✅ |
+
+### Handler-spezifisch (`crates/server/src/auth_rest.rs`)
+Einige Handler bauen Responses manuell (direktes `StatusCode::UNAUTHORIZED` etc.), weil
+sie verschiedene Response-Typen (`LoginResponse`, `RegisterResponse`) zurückgeben müssen.
 
 ## Sicherheitsmerkmale
 
 1. **PKCE**: Schutz vor Authorization Code Injection
-2. **Timing-sicherer Vergleich**: Verhindert Timing-Angriffe
-3. **Einmalige Auth-Codes**: Wiederverwendung nicht möglich
+2. **Timing-sicherer Vergleich**: Verhindert Timing-Angriffe in `verify_pkce`
+3. **Einmalige Auth-Codes**: Wiederverwendung nicht möglich (aus Store entfernt)
 4. **JWT mit Ablaufzeit**: Token laufen automatisch ab
-5. **In-Memory Store**: Auth-Codes nicht persistiert (Single-Node)
+5. **Bcrypt-Passwort-Hashing**: DEFAULT_COST = 12
+6. **In-Memory Store**: Auth-Codes nicht persistiert (Single-Node)
+
+## Offene Sicherheitslücken
+
+1. **Client Secret wird nicht geprüft** im `/api/auth/token`-Endpoint
+2. **`code_challenge_method`-Validierung fehlt** in `marvels_auth::server::authenticate`
+3. **Kein Login-State im Frontend**: JWT wird als JSON zurückgegeben, aber nicht
+   client-seitig gespeichert oder genutzt
+4. **marvels_auth** ist ein externer Workspace — `JWT_SECRET` muss als ENV gesetzt werden
+   (kein Fallback), härtes `expect()` bei fehlender Konfiguration

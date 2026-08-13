@@ -22,37 +22,40 @@ wemove/
 ├── Cargo.toml              # Workspace root
 ├── .env                    # Environment variables
 ├── docs/
-│   └── SPEC.md             # This specification
+│   ├── SPEC.md             # This specification
+│   ├── auth_ablauf.md       # Authentication flow documentation
+│   └── openapi_plan.md     # OpenAPI integration plan
 ├── crates/
 │   ├── common/             # Shared types, errors, tracing setup (framework-agnostic)
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── lib.rs
-│   │       ├── error.rs    # AppError enum (thiserror only, no HTTP mapping)
-│   │       └── tracing.rs  # Tracing setup
+│   │       ├── lib.rs      # Public exports, DTOs with ToSchema
+│   │       └── error.rs    # AppError + DbError enums (thiserror, ToSchema)
 │   ├── config/             # Configuration loading
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       └── lib.rs      # CLI + env config
+│   │       └── lib.rs      # Args + AuthConfig (clap, dotenvy)
 │   ├── server/             # Axum HTTP server
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── main.rs
-│   │       ├── routes.rs    # Route definitions
-│   │       ├── handlers.rs # Endpoint handlers (utoipa::path annotations)
-│   │       ├── error.rs    # ApiError newtype wrapping AppError, impl IntoResponse
-│   │       ├── openapi.rs  # OpenAPI spec (utoipa::OpenApi)
-│   │       └── auth_rest.rs
-│   ├── web/                # Topcoat full-stack frontend (SSR)
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       └── lib.rs      # Pages and components (registered via topcoat)
-│   └── web-server/         # Optional: dedicated Topcoat web server (standalone dev)
+│   │       ├── main.rs     # Entry point
+│   │       ├── routes.rs    # Router + middleware (TraceLayer, Prometheus, Auth)
+│   │       ├── handlers.rs  # GET/POST /api/main, GET /api/health (utoipa)
+│   │       ├── state.rs     # AppState { app_name, db } + migrations
+│   │       ├── error.rs     # ApiError newtype wrapping AppError, impl IntoResponse
+│   │       ├── openapi.rs   # ApiDoc struct (utoipa::OpenApi)
+│   │       ├── auth_rest.rs # /api/auth/login, /api/auth/token, /auth/register
+│   │       ├── user_repo.rs # UserRepository (find_by_email, create, verify_password)
+│   │       └── db_conversions.rs # From impls for turso/bcrypt → DbError (local)
+│   └── web/                # Topcoat full-stack frontend (SSR)
 │       ├── Cargo.toml
 │       └── src/
-│           └── main.rs
-└── tests/
-    └── integration_tests.rs
+│           ├── lib.rs       # register() function, module declarations
+│           ├── app.rs      # Root layout (HTML shell, Bootstrap 5 CDN)
+│           ├── home.rs     # Page "/" — landing
+│           └── auth/
+│               ├── login.rs    # Page "/login" — Form POST /api/auth/login
+│               └── register.rs # Page "/register" — Form POST /auth/register
 ```
 
 ## Crate Responsibilities
@@ -62,22 +65,29 @@ wemove/
 - Application error types (`thiserror`), framework-agnostic (kein Axum, kein `anyhow` als
   Pflicht-Dependency — `AppError::Internal` trägt eine `String`-Message; die Konvertierung
   aus `anyhow::Error` erfolgt im aufrufenden Code)
-- Shared DTOs (MainRequest, MainResponse, HealthResponse), annotiert mit
-  `utoipa::ToSchema` für die OpenAPI-Generierung
+- Shared DTOs (MainRequest, MainResponse, HealthResponse, LoginRequest/Response,
+  RegisterRequest/Response), annotiert mit `utoipa::ToSchema` für die OpenAPI-Generierung
+- `DbError`-Enum für Datenbank-spezifische Fehler (Connection, Query, Constraint, PasswordHash)
 
 ### config
 - Clap CLI argument parsing
 - Environment variable loading via dotenvy
 - Config precedence: CLI > ENV > defaults
+- `AuthConfig` für JWT_SECRET und token_expiry_secs (nur ENV, kein CLI-Flag)
 
 ### server
 - Axum router setup
-- Middleware (request logging, metrics)
+- Middleware (TraceLayer, Prometheus metrics, AuthRouter, AppState)
 - Endpoint handlers
 - Health check endpoint
 - `ApiError`-Newtype (`error.rs`), das `common::AppError` in eine HTTP-`Response`
   übersetzt (`IntoResponse`). Die HTTP-Mapping-Logik lebt bewusst hier und nicht in
   `common`, um `common` framework-agnostisch zu halten (siehe Orphan-Rule-Hinweis im Code)
+- SQLite-DB über Turso für User-Storage
+- `UserRepository` für find_by_email, create, verify_password (bcrypt)
+- DB-Migration: `users`-Tabelle wird beim Start erstellt
+- `db_conversions.rs`: lokale `From`-Implementierungen für turso/bcrypt → DbError
+  (notwendig wegen Rust Orphan Rule)
 
 ### web
 - [Topcoat](https://github.com/tokio-rs/topcoat) full-stack frontend
@@ -140,8 +150,8 @@ Main endpoint with JSON body support.
 }
 ```
 
-### GET /health
-Health check endpoint for liveness probes.
+### GET /api/health
+Health check endpoint for liveness probes (nicht `/health`, sondern `/api/health`).
 
 **Response (200):**
 ```json
@@ -150,11 +160,89 @@ Health check endpoint for liveness probes.
 }
 ```
 
+### POST /api/auth/login
+User-Login mit Email + Passwort. Fragt die SQLite-DB (Turso) via `UserRepository` ab, verifiziert
+das Passwort mit bcrypt und generiert ein JWT via `marvels_auth::AppState::create_access_token()`.
+Form-Submit (`application/x-www-form-urlencoded`).
+
+**Request (Form):**
+```
+email=alice@example.com&password=geheim
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+### POST /api/auth/token
+OAuth2-ähnlicher Token-Endpunkt. Generiert ein JWT (HS256) ohne User-Authentifizierung.
+Nimmt `client_id` und optional `scope` entgegen.
+
+**Request (JSON):**
+```json
+{
+  "client_id": "mein-client",
+  "scope": "read write"
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "read write"
+}
+```
+
+### POST /auth/register
+User-Registrierung. Erstellt einen neuen User in der SQLite-DB mit bcrypt-gehashtem Passwort.
+Form-Submit (`application/x-www-form-urlencoded`).
+
+**Request (Form):**
+```
+name=Alice&email=alice@example.com&password=geheim
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Registration successful",
+  "user_id": 1
+}
+```
+
+### GET /metrics
+Prometheus-Metriken (Counter, Histogram) für Request-Zählung und Latenz.
+
+### GET /swagger-ui/
+Interaktive Swagger-UI. OpenAPI-JSON unter `/api-docs/openapi.json`.
+
+### Weitere marvels_auth-Endpunkte
+Der `marvels_auth`-Router wird unter `/auth/*` genested:
+
+| Pfad | Methode | Beschreibung |
+|------|---------|-------------|
+| `/auth/authenticate` | POST | Auth-Code anfordern (PKCE) |
+| `/auth/authorize` | POST | Token austauschen (PKCE) |
+| `/auth/protected` | GET | Geschützte Ressource (JWT-validiert) |
+
 ## Middleware
 
-- **Request Logging**: All incoming requests logged with method, path, status, and duration
-- **Prometheus Metrics**: HTTP request metrics exported at `/metrics`
-- **Swagger-UI**: OpenAPI documentation at `/swagger-ui/`, spec at `/api-docs/openapi.json`
+| Schicht | Funktion |
+|---|---|
+| `TraceLayer` | Request/Response Logging |
+| `Extension(PrometheusHandle)` | Metrics-Endpoint |
+| `Extension(auth_router)` | marvels_auth nested Router |
+| `Extension(auth_state)` | JWT-Secret + Token-Expiry |
+| `Extension(state)` | AppState (DB, app_name) |
 
 ## OpenAPI / Swagger
 
@@ -183,25 +271,14 @@ wiederverwendbar für andere Consumer (CLI, andere Web-Layer, Tests).
 Das Frontend ist ein Rust-Crate (`crates/web`) – kein separater TypeScript-Client nötig.
 Pages und Components sind typsicherer Rust-Code, der direkt auf dem Server rendert.
 
-## Testing
-
-### Unit Tests
-Each crate contains unit tests for its components.
-
-### Integration Tests
-`tests/integration_tests.rs` contains integration tests covering:
-- All endpoints
-- Configuration loading
-- Error handling
-
 ## Dependencies
 
 ### common
 - `tracing`
 - `tracing-subscriber`
 - `thiserror`
-- `serde`
-- `utoipa`
+- `serde` (derive)
+- `utoipa` (derive)
 
 ### config
 - `clap` (derive, env)
@@ -210,14 +287,20 @@ Each crate contains unit tests for its components.
 ### server
 - `tokio` (full)
 - `axum`
+- `topcoat`
 - `metrics` + `metrics-exporter-prometheus`
 - `anyhow`
 - `serde_json`
 - `utoipa`
 - `utoipa-swagger-ui` (axum feature)
+- `turso`
+- `bcrypt`
+- `marvels_auth` (externer Workspace: `../marvels/marvels_auth`)
+- `common`, `config`, `web` (intern)
+- `tower`, `tower-http` (trace)
 
 ### web
-- `topcoat`
+- `topcoat` (router, view features)
 - `tokio`
 
 ## Usage
@@ -237,6 +320,7 @@ cargo run --package server -- --host 0.0.0.0 --port 3000 --log-level debug
 export HOST=0.0.0.0
 export PORT=3000
 export RUST_LOG=debug
+export JWT_SECRET=mein-geheimes-secret
 cargo run --package server
 ```
 
@@ -253,18 +337,17 @@ cargo test --workspace
 
 - `crates/web/src/lib.rs`: Pages und Components, registriert via `register()`
 - Pages mit `#[page("/path")]`
-- Components mit `#[component]`
+- Layout mit `#[layout("/")]`
+- Das Frontend ist derzeit statisches SSR — keine `#[component]`, keine `$()`-Reaktivität
+- Styling via Bootstrap 5 (CDN)
+- Form-Submits für Login/Register (kein SPA-Fetch)
 
-### Run
+### Middleware
 
-```bash
-cargo run --package web-server
-```
-oder via Topcoat CLI (`topcoat run`).
-
-### Topcoat CLI
-```bash
-cargo install topcoat-cli
-topcoat fmt      # Formatiert view!-Makros
-topcoat ui       # Kopiert UI-Komponenten ins Projekt
-```
+| Schicht | Funktion |
+|---|---|
+| `TraceLayer` | Request/Response Logging |
+| `Extension(PrometheusHandle)` | Metrics-Endpoint |
+| `Extension(auth_router)` | marvels_auth nested Router |
+| `Extension(auth_state)` | JWT-Secret + Token-Expiry |
+| `Extension(state)` | AppState (DB, app_name) |

@@ -23,13 +23,13 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Starting server on {}", addr);
 
-    let state = AppState::new().await?;
-    let api = routes::create_app(
-        state.clone(),
-        auth_config.jwt_secret.as_bytes(),
+    let state = AppState::new(
+        auth_config.jwt_secret.into_bytes(),
         auth_config.token_expiry_secs,
     )
-    .await;
+    .await?;
+
+    let api = routes::create_app(state.clone()).await;
     let app = web::register(topcoat::router::Router::builder().route(
         topcoat::router::tower::TowerRoute::new(
             topcoat::router::Methods::Any,

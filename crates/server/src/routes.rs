@@ -1,4 +1,8 @@
-use axum::{extract::Extension, routing::get, Router};
+use axum::{
+    extract::Extension,
+    routing::get,
+    Router,
+};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
@@ -18,21 +22,8 @@ async fn metrics_handler(Extension(handle): Extension<PrometheusHandle>) -> Stri
     handle.render()
 }
 
-pub async fn create_app(
-    state: AppState,
-    jwt_secret: impl AsRef<[u8]>,
-    token_expiry_secs: u64,
-) -> Router {
+pub async fn create_app(state: AppState) -> Router {
     let metrics_handle = setup_metrics_recorder();
-
-    let jwt_secret_vec = jwt_secret.as_ref().to_vec();
-
-    let auth_router = marvels_auth::AuthRouterBuilder::new()
-        .jwt_secret(&jwt_secret_vec)
-        .token_expiry(token_expiry_secs)
-        .build();
-
-    let auth_state = marvels_auth::AppState::new(jwt_secret_vec, token_expiry_secs);
 
     Router::new()
         .route(
@@ -49,16 +40,13 @@ pub async fn create_app(
             axum::routing::post(crate::auth_rest::login),
         )
         .route(
-            "/auth/register",
+            "/api/auth/register",
             axum::routing::post(crate::auth_rest::register),
         )
         .route("/metrics", get(metrics_handler))
-        .nest_service("/auth", auth_router.clone())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(TraceLayer::new_for_http())
         .layer(Extension(metrics_handle))
-        .layer(Extension(auth_router))
-        .layer(Extension(auth_state))
         .layer(Extension(state.clone()))
         .with_state(state)
 }

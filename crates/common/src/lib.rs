@@ -2,9 +2,10 @@ pub mod error;
 pub mod tracing;
 
 pub use error::AppError;
+pub use error::DbError;
 
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+pub use serde::{Deserialize, Serialize};
+pub use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct MainRequest {

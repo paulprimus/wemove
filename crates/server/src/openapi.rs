@@ -1,8 +1,7 @@
-use common::{HealthResponse, MainRequest, MainResponse};
-use marvels_auth::rest::{JsonErrorResponse, JsonTokenRequest};
+use common::{HealthResponse, LoginRequest, LoginResponse, MainRequest, MainResponse, RegisterRequest, RegisterResponse};
 use utoipa::OpenApi;
 
-use super::auth_rest::TokenResponse;
+use super::auth_rest::{JsonErrorResponse, JsonTokenRequest, TokenResponse};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -14,7 +13,8 @@ use super::auth_rest::TokenResponse;
         super::handlers::main_get,
         super::handlers::main_post,
         super::handlers::health,
-        super::auth_rest::token
+        super::auth_rest::login,
+        super::auth_rest::register
     ),
     components(schemas(
         MainRequest,
@@ -22,7 +22,11 @@ use super::auth_rest::TokenResponse;
         HealthResponse,
         JsonTokenRequest,
         TokenResponse,
-        JsonErrorResponse
+        JsonErrorResponse,
+        LoginRequest,
+        LoginResponse,
+        RegisterRequest,
+        RegisterResponse
     ))
 )]
 pub struct ApiDoc;

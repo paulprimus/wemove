@@ -14,13 +14,12 @@ authors = ["WeMove Team"]
 license = "MIT"
 
 [workspace.dependencies]
-marvels_auth = { path = "../marvels/marvels_auth" }
-proto = { git = "https://github.com/paulprimus/marvels.git", package = "proto", branch = "main" }
 anyhow = "1.0"
 axum = "0.8"
 topcoat = { version = "0.5", features = ["router", "tower", "view"] }
-turso = { version = "0.7" }
+turso = { version = "0.2" }
 bcrypt = "0.16"
+jsonwebtoken = { version = "10", features = ["rust_crypto"], default-features = false }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace"] }
 clap = { version = "4.5", features = ["derive", "env"] }

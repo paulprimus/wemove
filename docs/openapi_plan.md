@@ -1,50 +1,102 @@
-# OpenAPI-Integration für WeMove (Rust/Axum + Angular)
+# OpenAPI-Integration für WeMove (Rust/Axum + Topcoat)
+
+## Status
+
+Die Backend-OpenAPI-Integration (Schritte 1-5) ist umgesetzt. Die automatische
+Client-Generierung für das Topcoat-Frontend (Schritte 6-9) ist **offen**.
 
 ## Problem
-Aktuell gibt es keine maschinenlesbare API-Beschreibung. Endpoints (`/`, `/health`, `/metrics`)
-werden nur manuell in `docs/SPEC.md` dokumentiert. Das Angular-Frontend (`web/`) hat keine
-generierten Typen/Clients für die Rust-DTOs (`HelloWorldRequest`, `HelloWorldResponse`,
-`HealthResponse` in `common`).
 
-## Ansatz
-- **utoipa** als OpenAPI-Generator für Axum einführen (Makro-basiert, sehr verbreitet).
-- **utoipa-swagger-ui** für eine interaktive Swagger-UI unter `/swagger-ui` und
-  JSON-Spec unter `/api-docs/openapi.json`.
-- DTOs in `crates/common` mit `#[derive(ToSchema)]` annotieren, Handler in
-  `crates/server/src/handlers.rs` mit `#[utoipa::path(...)]` versehen.
-- Zentrales `ApiDoc`-Struct (`#[derive(OpenApi)]`) in `server`, das Pfade + Schemas sammelt.
-- **TypeScript-Client-Generierung** für `web/`: `openapi-typescript` (oder
-  `openapi-typescript-codegen`) als npm-Devdependency, das aus der laufenden/JSON-Spec
-  TS-Typen/Client generiert (npm-Script `generate:api`).
-- `docs/SPEC.md` um Hinweis auf Swagger-UI/OpenAPI-Workflow ergänzen.
+Die API-Endpoints werden zur Compilezeit als OpenAPI-Spec generiert (utoipa), aber:
+1. Nicht alle Handler sind in `ApiDoc` registriert (login, register, health fehlen)
+2. Auth-DTOs (`LoginRequest`, `RegisterRequest`, etc.) fehlen in den OpenAPI-Schemas
+3. Das Topcoat-Frontend nutzt keine generierten API-Typen
 
-## Betroffene Dateien
-- `crates/server/Cargo.toml` – neue Dependencies `utoipa`, `utoipa-swagger-ui`, `utoipa-axum` (optional)
-- `crates/common/Cargo.toml` + DTOs (`ToSchema`-Derive, evtl. Cargo-Feature-Flag um utoipa nicht zwingend überall zu brauchen)
-- `crates/server/src/handlers.rs` – `#[utoipa::path]`-Annotationen je Handler
-- `crates/server/src/routes.rs` – Swagger-UI-Route einhängen, `ApiDoc` mounten
-- neue Datei `crates/server/src/openapi.rs` – `ApiDoc`-Definition
-- `web/package.json` – Devdependency + Script für Client-Generierung
-- neue generierte Datei(en) unter `web/src/app/api/` (generierter Client, .gitignore-Frage klären)
-- `docs/SPEC.md` – Abschnitt zu OpenAPI/Swagger ergänzen
+## Umsetzung (abgeschlossen)
+
+### Schritt 1-2: Dependencies + ToSchema-Annotation ✅
+
+**`crates/common/src/lib.rs`**: Alle DTOs mit `#[derive(ToSchema, Serialize, Deserialize)]`:
+- `HealthResponse`, `MainRequest`, `MainResponse`
+- `LoginRequest`, `LoginResponse`, `RegisterRequest`, `RegisterResponse`
+
+### Schritt 3-4: Handler-Annotation + ApiDoc ✅
+
+**`crates/server/src/handlers.rs`**:
+```rust
+#[utoipa::path(get, path = "/api/main", tag = "main", responses(...))]
+pub async fn main_get() -> Json<MainResponse> { ... }
+
+#[utoipa::path(post, path = "/api/main", tag = "main", ...)]
+pub async fn main_post(...) -> Result<Json<MainResponse>, ApiError> { ... }
+
+#[utoipa::path(get, path = "/api/health", tag = "health", ...)]
+pub async fn health() -> Json<HealthResponse> { ... }
+```
+
+**`crates/server/src/openapi.rs`**: `ApiDoc` sammelt:
+- Pfade: `main_get`, `main_post`, `health`, `token`
+- Schemas: `MainRequest`, `MainResponse`, `HealthResponse`, `JsonTokenRequest`, `TokenResponse`, `JsonErrorResponse`
+
+### Schritt 5: Swagger-UI ✅
+
+**`crates/server/src/routes.rs:57`**:
+```rust
+.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+```
+
+## Offene Punkte
+
+### 1. Nicht alle Handler in ApiDoc
+
+Folgende Handler sind **nicht** in `ApiDoc` registriert:
+- `auth_rest::login` — `#[utoipa::path]` fehlt
+- `auth_rest::register` — `#[utoipa::path]` fehlt
+- `handlers::health` — ist registriert ✅
+
+Folgende Schemas fehlen in `ApiDoc`:
+- `LoginRequest`, `LoginResponse`
+- `RegisterRequest`, `RegisterResponse`
+
+**Empfehlung**: `ApiDoc` in `openapi.rs` erweitern:
+```rust
+paths(
+    super::handlers::main_get,
+    super::handlers::main_post,
+    super::handlers::health,
+    super::auth_rest::token,
+    super::auth_rest::login,      // hinzufügen
+    super::auth_rest::register,   // hinzufügen
+),
+components(schemas(
+    // ...existing...
+    LoginRequest, LoginResponse,
+    RegisterRequest, RegisterResponse,
+))
+```
+
+### 2. Kein Frontend-API-Client
+
+Das Topcoat-Frontend (`crates/web`) nutzt **keine generierten API-Typen**.
+Auth-Endpoints werden per HTML-Form-Submit aufgerufen (kein SPA-Fetch).
+Der JWT-Token wird als JSON zurückgegeben, aber client-seitig nicht gespeichert.
 
 ## Todos
 
-| # | ID | Titel | Beschreibung | Abhängig von |
+| # | ID | Titel | Beschreibung | Status |
 |---|----|----|----|----|
-| 1 | `add-utoipa-deps` | Adding utoipa dependencies | `utoipa`, `utoipa-swagger-ui` (und optional `utoipa-axum`) zu `Cargo.toml` (Workspace) und `crates/server/Cargo.toml` hinzufügen. `utoipa` (mit `derive`-Feature) zu `crates/common/Cargo.toml` hinzufügen, damit DTOs `ToSchema` ableiten können. | – |
-| 2 | `annotate-dtos` | Annotating DTOs with ToSchema | `#[derive(ToSchema)]` zu `HelloWorldRequest`, `HelloWorldResponse`, `HealthResponse` in `crates/common` hinzufügen (neben bestehendem `Serialize`/`Deserialize`). | 1 |
-| 3 | `annotate-handlers` | Annotating handlers with utoipa::path | `#[utoipa::path(...)]`-Makros zu `hello_world`, `hello_world_post`, `health` in `crates/server/src/handlers.rs` hinzufügen (Methode, Pfad, Request-/Response-Bodies, Statuscodes). | 1 |
-| 4 | `create-apidoc` | Creating ApiDoc module | Neue Datei `crates/server/src/openapi.rs` mit `#[derive(OpenApi)] struct ApiDoc`, die alle Pfade und Schemas sammelt. | 2, 3 |
-| 5 | `mount-swagger-ui` | Mounting Swagger UI route | `crates/server/src/routes.rs` anpassen: `SwaggerUi` (utoipa-swagger-ui) in den Axum-Router mergen, ApiDoc-JSON unter `/api-docs/openapi.json`, interaktive UI unter `/swagger-ui`. | 4 |
-| 6 | `verify-backend-build` | Verifying backend builds and serves spec | `cargo build --workspace` und `cargo test --workspace` ausführen, Server starten und `/api-docs/openapi.json` sowie `/swagger-ui` per curl prüfen. | 5 |
-| 7 | `add-ts-client-gen` | Adding TS client generation to Angular app | `openapi-typescript` (oder `openapi-typescript-codegen`) als devDependency in `web/package.json` hinzufügen, npm-Script `generate:api` ergänzen, das aus der Spec TS-Typen/Client nach `web/src/app/api/` generiert. Generiertes Ergebnis in `.gitignore` aufnehmen. | 6 |
-| 8 | `verify-ts-client-gen` | Verifying TS client generation works | `npm run generate:api` in `web/` gegen laufendes Backend (oder exportierte Spec-Datei) ausführen und prüfen, dass generierte Typen mit `ng build`/`tsc` kompilieren. | 7 |
-| 9 | `update-docs` | Updating SPEC.md documentation | Abschnitt in `docs/SPEC.md` zu OpenAPI/Swagger-UI-Setup und `generate:api`-Workflow ergänzen, Endpoints-/Dependencies-Abschnitte aktualisieren. | 8 |
+| 1 | `add-utoipa-deps` | Adding utoipa dependencies | Workspace + server + common | ✅ Abgeschlossen |
+| 2 | `annotate-dtos` | Annotating DTOs with ToSchema | MainRequest/Response, HealthResponse, Login*, Register* | ✅ Abgeschlossen |
+| 3 | `annotate-handlers` | Annotating handlers with utoipa::path | main_get, main_post, health | ✅ Abgeschlossen |
+| 4 | `create-apidoc` | Creating ApiDoc module | `openapi.rs` mit ApiDoc | ✅ Abgeschlossen |
+| 5 | `mount-swagger-ui` | Mounting Swagger UI route | `/swagger-ui`, `/api-docs/openapi.json` | ✅ Abgeschlossen |
+| 6 | `extend-apidoc` | Extending ApiDoc with all handlers | login, register, LoginRequest/Response, RegisterRequest/Response | ❌ Offen |
+| 7 | `annotate-auth-handlers` | Annotating auth handlers | `#[utoipa::path]` auf login und register | ❌ Offen |
+| 8 | `verify-openapi` | Verifying OpenAPI spec | Server starten, `/api-docs/openapi.json` prüfen | ❌ Offen |
 
-## Offene Punkte / Hinweise
-- Generierter TS-Client: entweder eingecheckt oder als Build-Step (`npm run generate:api`)
-  vor `ng build`/`ng serve` – Vorschlag: Build-Step, nicht eingecheckt (via `.gitignore`),
-  um Drift zu vermeiden.
-- Spec-Generierung erfolgt zur Compile-/Laufzeit aus dem Code (kein separates Schreiben
-  von YAML/JSON nötig) – Single Source of Truth bleibt Rust-Code.
+## Hinweise
+
+- Spec-Generierung erfolgt zur Compilezeit aus dem Code — keine manuelle YAML/JSON-Pflege
+- Single Source of Truth: Rust-Code mit utoipa-Makros
+- `web`-Crate ist Topcoat (Rust-SSR), **kein** Angular/TypeScript — ein TS-Client-Generator ist daher nicht relevant
+- Generierte API-Typen für Topcoat wären nur relevant, wenn das Frontend SPA-style Fetch-Aufrufe macht (aktuell: Form-Submits)

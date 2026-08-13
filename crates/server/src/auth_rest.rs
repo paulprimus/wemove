@@ -1,17 +1,30 @@
 use axum::{
-    extract::Extension,
+    extract::State,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     Form, Json,
 };
 use common::{LoginRequest, LoginResponse, RegisterRequest, RegisterResponse};
-use marvels_auth::rest::{JsonErrorResponse, JsonTokenRequest};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::state::AppState as ServerAppState;
+use crate::state::AppState;
 use crate::user_repo::{CreateUser, UserRepository};
-use marvels_auth::AppState as AuthAppState;
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct JsonTokenRequest {
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct JsonErrorResponse {
+    pub error: String,
+    pub error_description: String,
+}
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TokenResponse {
@@ -21,6 +34,40 @@ pub struct TokenResponse {
     pub scope: String,
 }
 
+impl IntoResponse for TokenResponse {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::OK, Json(self)).into_response()
+    }
+}
+
+#[derive(Debug)]
+pub struct TokenOk(pub TokenResponse);
+
+impl IntoResponse for TokenOk {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::OK, Json(self.0)).into_response()
+    }
+}
+
+impl IntoResponse for JsonErrorResponse {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
+    }
+}
+
+#[derive(Debug)]
+pub struct TokenError;
+
+impl IntoResponse for TokenError {
+    fn into_response(self) -> axum::response::Response {
+        tracing::error!("Token creation failed");
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(JsonErrorResponse {
+            error: "server_error".to_string(),
+            error_description: "Token creation failed".to_string(),
+        })).into_response()
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/api/auth/token",
@@ -28,101 +75,74 @@ pub struct TokenResponse {
     request_body = JsonTokenRequest,
     responses(
         (status = 200, description = "Access Token ausgestellt", body = TokenResponse),
-        (status = 400, description = "Ungültige Anfrage", body = JsonErrorResponse),
-        (status = 401, description = "Authentifizierung fehlgeschlagen", body = JsonErrorResponse),
         (status = 500, description = "Serverfehler", body = JsonErrorResponse)
     )
 )]
 pub async fn token(
-    Extension(auth_state): Extension<AuthAppState>,
-    Json(payload): Json<JsonTokenRequest>,
-) -> Response {
+    State(state): State<AppState>,
+    Form(payload): Form<JsonTokenRequest>,
+) -> Result<TokenOk, TokenError> {
     let scope = payload.scope.unwrap_or_else(|| "read".to_string());
-
-    let access_token = match auth_state.create_access_token(&payload.client_id, &scope) {
-        Ok(t) => t,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(JsonErrorResponse {
-                    error: "server_error".to_string(),
-                    error_description: e.to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    (
-        StatusCode::OK,
-        Json(TokenResponse {
-            access_token,
-            token_type: "Bearer".to_string(),
-            expires_in: auth_state.token_expiry_secs as i64,
-            scope,
-        }),
-    )
-        .into_response()
+    let access_token = state
+        .create_access_token(&payload.client_id, &scope)
+        .map_err(|_| TokenError)?;
+    Ok(TokenOk(TokenResponse {
+        access_token,
+        token_type: "Bearer".to_string(),
+        expires_in: state.token_expiry_secs as i64,
+        scope,
+    }))
 }
 
-fn unauthorized_response(message: &str) -> Response {
-    (
-        StatusCode::UNAUTHORIZED,
-        Json(LoginResponse {
-            success: false,
-            message: message.to_string(),
-            token: None,
-        }),
-    )
-        .into_response()
+#[derive(Debug)]
+pub struct LoginUnauthorized(pub String);
+
+impl IntoResponse for LoginUnauthorized {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(LoginResponse {
+                success: false,
+                message: self.0,
+                token: None,
+            }),
+        )
+            .into_response()
+    }
 }
 
-fn internal_error_response(message: &str) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(LoginResponse {
-            success: false,
-            message: message.to_string(),
-            token: None,
-        }),
-    )
-        .into_response()
+#[derive(Debug)]
+pub struct LoginError;
+
+impl IntoResponse for LoginError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(LoginResponse {
+                success: false,
+                message: "Internal server error".to_string(),
+                token: None,
+            }),
+        )
+            .into_response()
+    }
 }
 
-fn bad_request_response(message: &str) -> Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(RegisterResponse {
-            success: false,
-            message: message.to_string(),
-            user_id: None,
-        }),
-    )
-        .into_response()
-}
+#[derive(Debug)]
+pub struct LoginSuccess(pub String);
 
-fn conflict_response(message: &str) -> Response {
-    (
-        StatusCode::CONFLICT,
-        Json(RegisterResponse {
-            success: false,
-            message: message.to_string(),
-            user_id: None,
-        }),
-    )
-        .into_response()
-}
-
-fn register_success_response(user_id: i64) -> Response {
-    (
-        StatusCode::CREATED,
-        Json(RegisterResponse {
-            success: true,
-            message: "Registration successful".to_string(),
-            user_id: Some(user_id),
-        }),
-    )
-        .into_response()
+impl IntoResponse for LoginSuccess {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::OK,
+            Json(LoginResponse {
+                success: true,
+                message: "Login successful".to_string(),
+                token: Some(self.0),
+            }),
+        )
+            .into_response()
+    }
 }
 
 #[utoipa::path(
@@ -136,27 +156,26 @@ fn register_success_response(user_id: i64) -> Response {
     )
 )]
 pub async fn login(
-    Extension(auth_state): Extension<AuthAppState>,
-    Extension(server_state): Extension<ServerAppState>,
+    State(state): State<AppState>,
     Form(payload): Form<LoginRequest>,
-) -> Response {
+) -> Result<LoginSuccess, LoginUnauthorized> {
     tracing::info!("Login attempt for email: {}", payload.email);
 
     if payload.email.is_empty() || payload.password.is_empty() {
-        return unauthorized_response("Email and password are required");
+        return Err(LoginUnauthorized("Email and password are required".to_string()));
     }
 
-    let repo = UserRepository::new(server_state.db.clone());
+    let repo = UserRepository::new(state.db.clone());
 
     let user = match repo.find_by_email(&payload.email).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             tracing::info!("User not found: {}", payload.email);
-            return unauthorized_response("Invalid email or password");
+            return Err(LoginUnauthorized("Invalid email or password".to_string()));
         }
         Err(e) => {
             tracing::error!("Failed to find user: {}", e);
-            return internal_error_response("Database error");
+            return Err(LoginUnauthorized("Invalid email or password".to_string()));
         }
     };
 
@@ -164,40 +183,99 @@ pub async fn login(
         Ok(v) => v,
         Err(e) => {
             tracing::error!("Password verification error: {}", e);
-            return internal_error_response("Authentication error");
+            return Err(LoginUnauthorized("Authentication error".to_string()));
         }
     };
 
     if !password_valid {
         tracing::info!("Invalid password for email: {}", payload.email);
-        return unauthorized_response("Invalid email or password");
+        return Err(LoginUnauthorized("Invalid email or password".to_string()));
     }
 
     let scope = "read write";
-    let access_token = match auth_state.create_access_token(&payload.email, scope) {
-        Ok(t) => t,
+    match state.create_access_token(&payload.email, scope) {
+        Ok(access_token) => {
+            tracing::info!("Login successful for email: {}", payload.email);
+            Ok(LoginSuccess(access_token))
+        }
         Err(e) => {
             tracing::error!("Failed to create access token: {}", e);
-            return internal_error_response("Failed to create token");
+            Err(LoginUnauthorized("Authentication error".to_string()))
         }
-    };
+    }
+}
 
-    tracing::info!("Login successful for email: {}", payload.email);
+#[derive(Debug)]
+pub struct RegisterBadRequest(pub String);
 
-    (
-        StatusCode::OK,
-        Json(LoginResponse {
-            success: true,
-            message: "Login successful".to_string(),
-            token: Some(access_token),
-        }),
-    )
-        .into_response()
+impl IntoResponse for RegisterBadRequest {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(RegisterResponse {
+                success: false,
+                message: self.0,
+                user_id: None,
+            }),
+        )
+            .into_response()
+    }
+}
+
+#[derive(Debug)]
+pub struct RegisterConflict(pub String);
+
+impl IntoResponse for RegisterConflict {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::CONFLICT,
+            Json(RegisterResponse {
+                success: false,
+                message: self.0,
+                user_id: None,
+            }),
+        )
+            .into_response()
+    }
+}
+
+#[derive(Debug)]
+pub struct RegisterSuccess(pub i64);
+
+impl IntoResponse for RegisterSuccess {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::CREATED,
+            Json(RegisterResponse {
+                success: true,
+                message: "Registration successful".to_string(),
+                user_id: Some(self.0),
+            }),
+        )
+            .into_response()
+    }
+}
+
+#[derive(Debug)]
+pub struct RegisterError;
+
+impl IntoResponse for RegisterError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(RegisterResponse {
+                success: false,
+                message: "Failed to create user".to_string(),
+                user_id: None,
+            }),
+        )
+            .into_response()
+    }
 }
 
 #[utoipa::path(
     post,
-    path = "/auth/register",
+    path = "/api/auth/register",
     tag = "auth",
     request_body = RegisterRequest,
     responses(
@@ -207,16 +285,16 @@ pub async fn login(
     )
 )]
 pub async fn register(
-    Extension(server_state): Extension<ServerAppState>,
+    State(state): State<AppState>,
     Form(payload): Form<RegisterRequest>,
-) -> Response {
+) -> Result<RegisterSuccess, RegisterError> {
     tracing::info!("Registration attempt for email: {}", payload.email);
 
     if payload.email.is_empty() || payload.password.is_empty() || payload.name.is_empty() {
-        return bad_request_response("Name, email and password are required");
+        return Err(RegisterError);
     }
 
-    let repo = UserRepository::new(server_state.db.clone());
+    let repo = UserRepository::new(state.db.clone());
 
     let create_user = CreateUser {
         email: payload.email,
@@ -227,23 +305,15 @@ pub async fn register(
     match repo.create(create_user).await {
         Ok(user_id) => {
             tracing::info!("Registration successful for user_id: {}", user_id);
-            register_success_response(user_id)
+            Ok(RegisterSuccess(user_id))
         }
         Err(common::error::AppError::Conflict(msg)) => {
-            tracing::info!("Email already exists");
-            conflict_response(&msg)
+            tracing::info!("Email already exists: {}", msg);
+            Err(RegisterError)
         }
         Err(e) => {
             tracing::error!("Registration error: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(RegisterResponse {
-                    success: false,
-                    message: "Failed to create user".to_string(),
-                    user_id: None,
-                }),
-            )
-                .into_response()
+            Err(RegisterError)
         }
     }
 }
