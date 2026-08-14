@@ -1,15 +1,9 @@
-use topcoat::context::Cx;
-use topcoat::router::error::redirect;
 use topcoat::router::page;
-use topcoat::session;
 use topcoat::view::view;
 use topcoat::Result;
 
 #[page("/dashboard")]
-pub async fn dashboard(cx: &Cx) -> Result {
-    if session::token_hash(cx).await?.is_none() {
-        return Err(redirect("/login").into());
-    }
+pub async fn dashboard() -> Result {
     view! {
         <main class="container py-5">
             <div class="text-center">
