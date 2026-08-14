@@ -9,7 +9,7 @@ pub async fn login() -> Result {
                     <div class="card shadow">
                         <div class="card-body p-4">
                             <h1 class="h3 mb-4 fw-normal text-center">"WeMove"</h1>
-                            <form method="post" action="/api/auth/login">
+                            <form method="post" action="/auth/login">
                                 <div class="mb-3">
                                     <label for="email" class="form-label">"Email"</label>
                                     <input type="email" class="form-control" id="email" name="email" required="" placeholder="you@example.com">
