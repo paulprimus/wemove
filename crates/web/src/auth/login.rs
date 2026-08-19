@@ -1,4 +1,6 @@
-use topcoat::{router::page, view::view, Result};
+use topcoat::router::page;
+use topcoat::view::view;
+use topcoat::Result;
 
 #[page("/login")]
 pub async fn login() -> Result {

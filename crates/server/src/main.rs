@@ -40,10 +40,7 @@ async fn login(cx: &Cx, Form(payload): Form<LoginRequest>) -> Result<SeeOther> {
         return Err(redirect("/login?error=missing_fields").into());
     }
 
-    let state: &AppState = match topcoat::context::app_context(cx) {
-        Some(s) => s,
-        None => return Err(redirect("/login?error=internal_error").into()),
-    };
+    let state = topcoat::context::app_context::<AppState>(cx);
 
     let repo = UserRepository::new(state.db.clone());
 
@@ -96,10 +93,7 @@ async fn register(cx: &Cx, Form(payload): Form<RegisterRequest>) -> Result<SeeOt
         return Err(redirect("/register?error=missing_fields").into());
     }
 
-    let state: &AppState = match topcoat::context::app_context(cx) {
-        Some(s) => s,
-        None => return Err(redirect("/register?error=internal_error").into()),
-    };
+    let state = topcoat::context::app_context::<AppState>(cx);
 
     let repo = UserRepository::new(state.db.clone());
 
@@ -123,7 +117,7 @@ async fn register(cx: &Cx, Form(payload): Form<RegisterRequest>) -> Result<SeeOt
 
 #[route(POST "/auth/logout")]
 async fn logout(cx: &Cx) -> Result<SeeOther> {
-    if let Some(hash) = session::stop(cx).await.ok().flatten() {
+    if let Some(hash) = session::stop(cx).await? {
         let state = topcoat::context::app_context::<AppState>(cx);
         if let Ok(conn) = state.db.connect() {
             let token_hash = hash_to_hex(hash.as_ref());
