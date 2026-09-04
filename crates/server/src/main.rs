@@ -37,7 +37,7 @@ fn hash_to_hex(hash: &[u8]) -> String {
 #[route(POST "/auth/login")]
 async fn login(cx: &Cx, Form(payload): Form<LoginRequest>) -> Result<SeeOther> {
     if payload.email.is_empty() || payload.password.is_empty() {
-        return Err(redirect("/login?error=missing_fields").into());
+        return Ok(see_other("/login?error=missing_fields"));
     }
 
     let state = topcoat::context::app_context::<AppState>(cx);
@@ -46,21 +46,21 @@ async fn login(cx: &Cx, Form(payload): Form<LoginRequest>) -> Result<SeeOther> {
 
     let user = match repo.find_by_email(&payload.email).await {
         Ok(Some(u)) => u,
-        _ => return Err(redirect("/login?error=invalid_credentials").into()),
+        _ => return Ok(see_other("/login?error=invalid_credentials")),
     };
 
     let password_valid = match repo.verify_password(&payload.password, &user.password_hash) {
         Ok(v) => v,
-        _ => return Err(redirect("/login?error=invalid_credentials").into()),
+        _ => return Ok(see_other("/login?error=invalid_credentials")),
     };
 
     if !password_valid {
-        return Err(redirect("/login?error=invalid_credentials").into());
+        return Ok(see_other("/login?error=invalid_credentials"));
     }
 
     let session = match session::start(cx).await {
         Ok(s) => s,
-        Err(_) => return Err(redirect("/login?error=session_error").into()),
+        Err(_) => return Ok(see_other("/login?error=session_error")),
     };
 
     if let Err(e) = persist_session(state, user.id, &session).await {

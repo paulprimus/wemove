@@ -44,9 +44,8 @@ wemove/
 │   │       ├── state.rs     # AppState { app_name, db } + migrations
 │   │       ├── error.rs     # ApiError newtype wrapping AppError, impl IntoResponse
 │   │       ├── openapi.rs   # ApiDoc struct (utoipa::OpenApi)
-│   │       ├── auth_rest.rs # /api/auth/login, /api/auth/token, /auth/register
+│   │       ├── auth_rest.rs # REST: /api/auth/login, /api/auth/token, /api/auth/register
 │   │       ├── user_repo.rs # UserRepository (find_by_email, create, verify_password)
-│   │       └── db_conversions.rs # From impls for turso/bcrypt → DbError (local)
 │   └── web/                # Topcoat full-stack frontend (SSR)
 │       ├── Cargo.toml
 │       └── src/
@@ -86,8 +85,7 @@ wemove/
 - SQLite-DB über Turso für User-Storage
 - `UserRepository` für find_by_email, create, verify_password (bcrypt)
 - DB-Migration: `users`-Tabelle wird beim Start erstellt
-- `db_conversions.rs`: lokale `From`-Implementierungen für turso/bcrypt → DbError
-  (notwendig wegen Rust Orphan Rule)
+- JWT-Erzeugung erfolgt direkt in `state.rs` mit `jsonwebtoken`.
 
 ### web
 - [Topcoat](https://github.com/tokio-rs/topcoat) full-stack frontend
@@ -162,7 +160,7 @@ Health check endpoint for liveness probes (nicht `/health`, sondern `/api/health
 
 ### POST /api/auth/login
 User-Login mit Email + Passwort. Fragt die SQLite-DB (Turso) via `UserRepository` ab, verifiziert
-das Passwort mit bcrypt und generiert ein JWT via `marvels_auth::AppState::create_access_token()`.
+das Passwort mit bcrypt und generiert ein JWT via `AppState::create_access_token()`.
 Form-Submit (`application/x-www-form-urlencoded`).
 
 **Request (Form):**
@@ -181,9 +179,14 @@ email=alice@example.com&password=geheim
 
 ### POST /api/auth/token
 OAuth2-ähnlicher Token-Endpunkt. Generiert ein JWT (HS256) ohne User-Authentifizierung.
-Nimmt `client_id` und optional `scope` entgegen.
+Nimmt `client_id` und optional `scope` als Formulardaten entgegen.
 
-**Request (JSON):**
+**Request (Form):**
+```
+client_id=mein-client&scope=read%20write
+```
+
+Inhaltlich entspricht das:
 ```json
 {
   "client_id": "mein-client",
@@ -201,8 +204,8 @@ Nimmt `client_id` und optional `scope` entgegen.
 }
 ```
 
-### POST /auth/register
-User-Registrierung. Erstellt einen neuen User in der SQLite-DB mit bcrypt-gehashtem Passwort.
+### POST /api/auth/register
+REST-User-Registrierung. Erstellt einen neuen User in der SQLite-DB mit bcrypt-gehashtem Passwort.
 Form-Submit (`application/x-www-form-urlencoded`).
 
 **Request (Form):**
@@ -225,14 +228,16 @@ Prometheus-Metriken (Counter, Histogram) für Request-Zählung und Latenz.
 ### GET /swagger-ui/
 Interaktive Swagger-UI. OpenAPI-JSON unter `/api-docs/openapi.json`.
 
-### Weitere marvels_auth-Endpunkte
-Der `marvels_auth`-Router wird unter `/auth/*` genested:
+### Web-Authentifizierung
+Das Topcoat-Frontend stellt zusätzlich Formularrouten bereit:
 
 | Pfad | Methode | Beschreibung |
 |------|---------|-------------|
-| `/auth/authenticate` | POST | Auth-Code anfordern (PKCE) |
-| `/auth/authorize` | POST | Token austauschen (PKCE) |
-| `/auth/protected` | GET | Geschützte Ressource (JWT-validiert) |
+| `/login` | GET | Login-Seite |
+| `/auth/login` | POST | Login-Formular, Weiterleitung zum Dashboard |
+| `/register` | GET | Registrierungsseite |
+| `/auth/register` | POST | Registrierungsformular, Weiterleitung zur Login-Seite |
+| `/auth/logout` | POST | Session beenden |
 
 ## Middleware
 
@@ -240,7 +245,7 @@ Der `marvels_auth`-Router wird unter `/auth/*` genested:
 |---|---|
 | `TraceLayer` | Request/Response Logging |
 | `Extension(PrometheusHandle)` | Metrics-Endpoint |
-| `Extension(auth_router)` | marvels_auth nested Router |
+| `Extension(AppState)` | Datenbank und JWT-Konfiguration |
 | `Extension(auth_state)` | JWT-Secret + Token-Expiry |
 | `Extension(state)` | AppState (DB, app_name) |
 
@@ -295,7 +300,7 @@ Pages und Components sind typsicherer Rust-Code, der direkt auf dem Server rende
 - `utoipa-swagger-ui` (axum feature)
 - `turso`
 - `bcrypt`
-- `marvels_auth` (externer Workspace: `../marvels/marvels_auth`)
+- `jsonwebtoken` (JWT-Erzeugung)
 - `common`, `config`, `web` (intern)
 - `tower`, `tower-http` (trace)
 
@@ -348,6 +353,6 @@ cargo test --workspace
 |---|---|
 | `TraceLayer` | Request/Response Logging |
 | `Extension(PrometheusHandle)` | Metrics-Endpoint |
-| `Extension(auth_router)` | marvels_auth nested Router |
+| `Extension(AppState)` | Datenbank und JWT-Konfiguration |
 | `Extension(auth_state)` | JWT-Secret + Token-Expiry |
 | `Extension(state)` | AppState (DB, app_name) |

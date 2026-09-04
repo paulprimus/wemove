@@ -2,15 +2,14 @@
 
 ## Status
 
-Die Backend-OpenAPI-Integration (Schritte 1-5) ist umgesetzt. Die automatische
-Client-Generierung für das Topcoat-Frontend (Schritte 6-9) ist **offen**.
+Die Backend-OpenAPI-Integration (Schritte 1-7) ist umgesetzt. Eine automatische
+Client-Generierung für das Topcoat-Frontend ist nicht vorgesehen, da das Frontend
+aktuell serverseitig gerenderte HTML-Formulare verwendet.
 
 ## Problem
 
 Die API-Endpoints werden zur Compilezeit als OpenAPI-Spec generiert (utoipa), aber:
-1. Nicht alle Handler sind in `ApiDoc` registriert (login, register, health fehlen)
-2. Auth-DTOs (`LoginRequest`, `RegisterRequest`, etc.) fehlen in den OpenAPI-Schemas
-3. Das Topcoat-Frontend nutzt keine generierten API-Typen
+1. Das Topcoat-Frontend nutzt keine generierten API-Typen
 
 ## Umsetzung (abgeschlossen)
 
@@ -34,9 +33,9 @@ pub async fn main_post(...) -> Result<Json<MainResponse>, ApiError> { ... }
 pub async fn health() -> Json<HealthResponse> { ... }
 ```
 
-**`crates/server/src/openapi.rs`**: `ApiDoc` sammelt:
-- Pfade: `main_get`, `main_post`, `health`, `token`
-- Schemas: `MainRequest`, `MainResponse`, `HealthResponse`, `JsonTokenRequest`, `TokenResponse`, `JsonErrorResponse`
+**`crates/server/src/openapi.rs`**: `ApiDoc` sammelt alle API-Pfade:
+- Pfade: `main_get`, `main_post`, `health`, `token`, `login`, `register`
+- Schemas für Main, Health, Token sowie Login und Registrierung
 
 ### Schritt 5: Swagger-UI ✅
 
@@ -47,35 +46,7 @@ pub async fn health() -> Json<HealthResponse> { ... }
 
 ## Offene Punkte
 
-### 1. Nicht alle Handler in ApiDoc
-
-Folgende Handler sind **nicht** in `ApiDoc` registriert:
-- `auth_rest::login` — `#[utoipa::path]` fehlt
-- `auth_rest::register` — `#[utoipa::path]` fehlt
-- `handlers::health` — ist registriert ✅
-
-Folgende Schemas fehlen in `ApiDoc`:
-- `LoginRequest`, `LoginResponse`
-- `RegisterRequest`, `RegisterResponse`
-
-**Empfehlung**: `ApiDoc` in `openapi.rs` erweitern:
-```rust
-paths(
-    super::handlers::main_get,
-    super::handlers::main_post,
-    super::handlers::health,
-    super::auth_rest::token,
-    super::auth_rest::login,      // hinzufügen
-    super::auth_rest::register,   // hinzufügen
-),
-components(schemas(
-    // ...existing...
-    LoginRequest, LoginResponse,
-    RegisterRequest, RegisterResponse,
-))
-```
-
-### 2. Kein Frontend-API-Client
+### 1. Kein Frontend-API-Client
 
 Das Topcoat-Frontend (`crates/web`) nutzt **keine generierten API-Typen**.
 Auth-Endpoints werden per HTML-Form-Submit aufgerufen (kein SPA-Fetch).
@@ -90,8 +61,8 @@ Der JWT-Token wird als JSON zurückgegeben, aber client-seitig nicht gespeichert
 | 3 | `annotate-handlers` | Annotating handlers with utoipa::path | main_get, main_post, health | ✅ Abgeschlossen |
 | 4 | `create-apidoc` | Creating ApiDoc module | `openapi.rs` mit ApiDoc | ✅ Abgeschlossen |
 | 5 | `mount-swagger-ui` | Mounting Swagger UI route | `/swagger-ui`, `/api-docs/openapi.json` | ✅ Abgeschlossen |
-| 6 | `extend-apidoc` | Extending ApiDoc with all handlers | login, register, LoginRequest/Response, RegisterRequest/Response | ❌ Offen |
-| 7 | `annotate-auth-handlers` | Annotating auth handlers | `#[utoipa::path]` auf login und register | ❌ Offen |
+| 6 | `extend-apidoc` | Extending ApiDoc with all handlers | login, register, LoginRequest/Response, RegisterRequest/Response | ✅ Abgeschlossen |
+| 7 | `annotate-auth-handlers` | Annotating auth handlers | `#[utoipa::path]` auf login und register | ✅ Abgeschlossen |
 | 8 | `verify-openapi` | Verifying OpenAPI spec | Server starten, `/api-docs/openapi.json` prüfen | ❌ Offen |
 
 ## Hinweise
