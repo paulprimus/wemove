@@ -1,20 +1,40 @@
-use topcoat::{router::layout, view::view, Result};
+use std::future::Future;
+use topcoat::router::Slot;
+use topcoat::view::View;
+use topcoat::{context::Cx, router::layout, session, view::view, Result};
 
 #[layout("/")]
-pub async fn app_layout(slot: Result) -> Result {
-    view! {
+pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
+    let is_authenticated = session::token_hash(cx).await?.is_some();
+    Ok(view! {
         <!DOCTYPE html>
         <html lang="en">
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>"WeMove"</title>
-                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+                <link rel="stylesheet" href=(topcoat::tailwind::stylesheet!())>
             </head>
-            <body>
-                (slot?)
-                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+            <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+                <header class="border-b border-white/10 bg-slate-950/90">
+                    <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4" aria-label="Main navigation">
+                        <a href="/" class="text-lg font-semibold tracking-tight text-white">"WeMove"</a>
+                        if is_authenticated {
+                            <details class="relative">
+                                <summary class="cursor-pointer list-none rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10">"Menu"</summary>
+                                <div class="absolute right-0 z-10 mt-2 w-44 rounded-xl border border-white/10 bg-slate-900 p-2 shadow-xl">
+                                    <a href="/" class="block rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white">"Home"</a>
+                                    <a href="/dashboard" class="block rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white">"Dashboard"</a>
+                                    <form method="post" action="/auth/logout">
+                                        <button type="submit" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-white/10 hover:text-white" style="display: block; width: 100%; text-align: left;">"Sign out"</button>
+                                    </form>
+                                </div>
+                            </details>
+                        }
+                    </nav>
+                </header>
+                (slot)
             </body>
         </html>
-    }
+    })
 }

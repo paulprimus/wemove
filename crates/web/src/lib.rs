@@ -2,6 +2,7 @@ pub mod app;
 pub mod auth;
 pub mod dashboard;
 pub mod home;
+mod components;
 
 use topcoat::router::RouterBuilder;
 

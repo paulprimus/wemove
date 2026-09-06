@@ -20,7 +20,11 @@ cargo test --workspace
 ### Web application
 
 ```bash
-cargo run --package server
+# Install once
+cargo install topcoat-cli
+
+# Build Tailwind, bundle assets, and run the server
+topcoat dev
 ```
 
 Topcoat rendert die Weboberfläche zusammen mit dem Server unter

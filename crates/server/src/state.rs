@@ -1,6 +1,6 @@
 use common::error::{AppError, DbError};
 use serde::{Deserialize, Serialize};
-use turso::Builder;
+use turso::{Builder, Connection};
 
 #[derive(Debug, Clone)]
 pub struct User {
@@ -67,6 +67,39 @@ pub struct JwtClaims {
 async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
     let conn = db.connect().map_err(|e| AppError::Internal(e.to_string()))?;
 
+    create_user_table(&conn).await?;
+
+    create_board_table(&conn).await?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+
+    tracing::info!("Database migrations completed");
+    Ok(())
+}
+
+async fn create_board_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS boards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+        .await
+        .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    Ok(())
+}
+
+async fn create_user_table(conn: &Connection) -> Result<(), AppError> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,9 +110,7 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
         )",
         (),
     )
-    .await
-    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
-
-    tracing::info!("Database migrations completed");
+        .await
+        .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
     Ok(())
 }

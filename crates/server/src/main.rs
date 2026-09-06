@@ -11,10 +11,11 @@ use common::{LoginRequest, RegisterRequest};
 use config::{Args, AuthConfig};
 use state::AppState;
 use tokio::net::TcpListener;
+use topcoat::asset::{AssetBundle, RouterBuilderAssetExt};
 use topcoat::context::Cx;
 use topcoat::cookie::RouterBuilderCookieExt;
 use topcoat::router::content::Form;
-use topcoat::router::error::{redirect, see_other, SeeOther};
+use topcoat::router::error::{see_other, SeeOther};
 use topcoat::router::{Methods, Path, RouterBuilder, route};
 use topcoat::router::tower::TowerRoute;
 use topcoat::session::{self, Session};
@@ -90,7 +91,7 @@ async fn persist_session(state: &AppState, user_id: i64, session: &Session) -> R
 #[route(POST "/auth/register")]
 async fn register(cx: &Cx, Form(payload): Form<RegisterRequest>) -> Result<SeeOther> {
     if payload.email.is_empty() || payload.password.is_empty() || payload.name.is_empty() {
-        return Err(redirect("/register?error=missing_fields").into());
+        return Ok(see_other("/register?error=missing_fields"));
     }
 
     let state = topcoat::context::app_context::<AppState>(cx);
@@ -106,11 +107,11 @@ async fn register(cx: &Cx, Form(payload): Form<RegisterRequest>) -> Result<SeeOt
     match repo.create(create_user).await {
         Ok(_) => Ok(see_other("/login?registered=true")),
         Err(common::error::AppError::Conflict(_)) => {
-            Err(redirect("/register?error=email_exists").into())
+            Ok(see_other("/register?error=email_exists"))
         }
         Err(e) => {
             tracing::error!("Registration error: {}", e);
-            Err(redirect("/register?error=internal_error").into())
+            Ok(see_other("/register?error=internal_error"))
         }
     }
 }
@@ -156,11 +157,12 @@ async fn main() -> anyhow::Result<()> {
         .page(dashboard_page)
         .cookies()
         .app_context(state)
-        .sessions(topcoat::session::SessionConfig::default())
+        .sessions(session::SessionConfig::default())
         .route(login)
         .route(register)
         .route(logout)
         .route(TowerRoute::new(Methods::Any, Path::new("/{*rest}"), api))
+        .assets(AssetBundle::load().expect("failed to load Topcoat asset bundle"))
         .build();
 
     let listener = TcpListener::bind(addr).await?;
