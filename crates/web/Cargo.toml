@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-topcoat = { workspace = true, features = ["router", "view"] }
+topcoat = { workspace = true, features = ["router", "view", "tailwind"] }
 serde = { workspace = true }
 
 [build-dependencies]

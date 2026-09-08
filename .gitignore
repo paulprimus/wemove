@@ -5,5 +5,5 @@
 /web/dist
 /web/.angular
 /db
-
+node_modules/
 session-ses_*.md

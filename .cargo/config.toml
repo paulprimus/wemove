@@ -1,0 +1,2 @@
+[env]
+TAILWINDCSS = { value = "node_modules/.bin/tailwindcss.cmd", relative = true }

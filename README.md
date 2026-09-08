@@ -27,6 +27,18 @@ cargo install topcoat-cli
 topcoat dev
 ```
 
+The Tailwind build uses the locally installed npm CLI from
+`node_modules/.bin/tailwindcss.cmd`. The project-local Cargo configuration
+sets `TAILWINDCSS` automatically:
+
+```bash
+npm install
+cargo build -p web
+```
+
+This avoids the automatic GitHub download performed by Topcoat's default
+configuration and is useful in environments with TLS-inspecting proxies.
+
 Topcoat rendert die Weboberfläche zusammen mit dem Server unter
 `http://localhost:8080`. Die Axum-API bleibt unter `/api/*` verfügbar.
 
