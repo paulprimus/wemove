@@ -1,8 +1,4 @@
-use axum::{
-    extract::Extension,
-    routing::get,
-    Router,
-};
+use axum::{Router, extract::Extension, routing::get};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;

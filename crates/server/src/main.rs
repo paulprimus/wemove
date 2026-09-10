@@ -11,18 +11,18 @@ use common::{LoginRequest, RegisterRequest};
 use config::{Args, AuthConfig};
 use state::AppState;
 use tokio::net::TcpListener;
+use topcoat::Result;
 use topcoat::asset::{AssetBundle, RouterBuilderAssetExt};
 use topcoat::context::Cx;
 use topcoat::cookie::RouterBuilderCookieExt;
 use topcoat::router::content::Form;
-use topcoat::router::error::{see_other, SeeOther};
-use topcoat::router::{Methods, Path, RouterBuilder, route};
+use topcoat::router::error::{SeeOther, see_other};
 use topcoat::router::tower::TowerRoute;
-use topcoat::session::{self, Session};
-use topcoat::session::RouterBuilderSessionExt;
+use topcoat::router::{Methods, Path, RouterBuilder, route};
 use topcoat::serve;
+use topcoat::session::RouterBuilderSessionExt;
+use topcoat::session::{self, Session};
 use tracing;
-use topcoat::Result;
 
 use user_repo::{CreateUser, UserRepository};
 use web::app::app_layout;
@@ -75,15 +75,18 @@ async fn persist_session(state: &AppState, user_id: i64, session: &Session) -> R
     let conn = state.db.connect().map_err(|e| e.to_string())?;
 
     let token_hash = hash_to_hex(session.token_hash.as_ref());
-    let expires_at = session.expires_at
+    let expires_at = session
+        .expires_at
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs() as i64;
 
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?1, ?2, ?3)",
         (token_hash, user_id, expires_at),
-    ).await;
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -106,9 +109,7 @@ async fn register(cx: &Cx, Form(payload): Form<RegisterRequest>) -> Result<SeeOt
 
     match repo.create(create_user).await {
         Ok(_) => Ok(see_other("/login?registered=true")),
-        Err(common::error::AppError::Conflict(_)) => {
-            Ok(see_other("/register?error=email_exists"))
-        }
+        Err(common::error::AppError::Conflict(_)) => Ok(see_other("/register?error=email_exists")),
         Err(e) => {
             tracing::error!("Registration error: {}", e);
             Ok(see_other("/register?error=internal_error"))
@@ -122,10 +123,9 @@ async fn logout(cx: &Cx) -> Result<SeeOther> {
         let state = topcoat::context::app_context::<AppState>(cx);
         if let Ok(conn) = state.db.connect() {
             let token_hash = hash_to_hex(hash.as_ref());
-            let _ = conn.execute(
-                "DELETE FROM sessions WHERE token_hash = ?1",
-                [token_hash],
-            ).await;
+            let _ = conn
+                .execute("DELETE FROM sessions WHERE token_hash = ?1", [token_hash])
+                .await;
         }
     }
     Ok(see_other("/"))

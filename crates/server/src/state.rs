@@ -65,9 +65,13 @@ pub struct JwtClaims {
 }
 
 async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
-    let conn = db.connect().map_err(|e| AppError::Internal(e.to_string()))?;
+    let conn = db
+        .connect()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     create_user_table(&conn).await?;
+
+    create_session_table(&conn).await?;
 
     create_board_table(&conn).await?;
 
@@ -94,8 +98,8 @@ async fn create_board_table(conn: &Connection) -> Result<(), AppError> {
         )",
         (),
     )
-        .await
-        .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
     Ok(())
 }
 
@@ -110,7 +114,31 @@ async fn create_user_table(conn: &Connection) -> Result<(), AppError> {
         )",
         (),
     )
-        .await
-        .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    Ok(())
+}
+
+async fn create_session_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sessions (
+            token_hash TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+
     Ok(())
 }

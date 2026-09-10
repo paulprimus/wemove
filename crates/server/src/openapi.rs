@@ -1,4 +1,7 @@
-use common::{HealthResponse, LoginRequest, LoginResponse, MainRequest, MainResponse, RegisterRequest, RegisterResponse};
+use common::{
+    HealthResponse, LoginRequest, LoginResponse, MainRequest, MainResponse, RegisterRequest,
+    RegisterResponse,
+};
 use utoipa::OpenApi;
 
 use super::auth_rest::{JsonErrorResponse, JsonTokenRequest, TokenResponse};

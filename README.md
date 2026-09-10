@@ -7,6 +7,9 @@ Web application with a Topcoat frontend and Axum REST backend.
 ### Backend
 
 ```bash
+# Build the binary and its Topcoat asset bundle
+topcoat asset bundle --package server
+
 # Run server
 cargo run --package server
 
@@ -20,15 +23,15 @@ cargo test --workspace
 ### Web application
 
 ```bash
-# Install once
-cargo install topcoat-cli
+# Install once (matching the workspace's Topcoat version)
+cargo install topcoat-cli@0.7 --locked
 
 # Build Tailwind, bundle assets, and run the server
 topcoat dev
 ```
 
 The Tailwind build uses the locally installed npm CLI from
-`node_modules/.bin/tailwindcss.cmd`. The project-local Cargo configuration
+`crates/web/node_modules/.bin/tailwindcss`. The project-local Cargo configuration
 sets `TAILWINDCSS` automatically:
 
 ```bash
@@ -38,6 +41,13 @@ cargo build -p web
 
 This avoids the automatic GitHub download performed by Topcoat's default
 configuration and is useful in environments with TLS-inspecting proxies.
+
+For a manual server start, create the asset bundle after building:
+
+```bash
+topcoat asset bundle --package server
+cargo run --package server
+```
 
 Topcoat rendert die Weboberfläche zusammen mit dem Server unter
 `http://localhost:8080`. Die Axum-API bleibt unter `/api/*` verfügbar.

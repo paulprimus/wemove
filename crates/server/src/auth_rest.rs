@@ -1,9 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Form, Json,
-};
+use axum::{Form, Json, extract::State, http::StatusCode, response::IntoResponse};
 use common::{LoginRequest, LoginResponse, RegisterRequest, RegisterResponse};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -61,10 +56,14 @@ pub struct TokenError;
 impl IntoResponse for TokenError {
     fn into_response(self) -> axum::response::Response {
         tracing::error!("Token creation failed");
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(JsonErrorResponse {
-            error: "server_error".to_string(),
-            error_description: "Token creation failed".to_string(),
-        })).into_response()
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(JsonErrorResponse {
+                error: "server_error".to_string(),
+                error_description: "Token creation failed".to_string(),
+            }),
+        )
+            .into_response()
     }
 }
 
@@ -162,7 +161,9 @@ pub async fn login(
     tracing::info!("Login attempt for email: {}", payload.email);
 
     if payload.email.is_empty() || payload.password.is_empty() {
-        return Err(LoginUnauthorized("Email and password are required".to_string()));
+        return Err(LoginUnauthorized(
+            "Email and password are required".to_string(),
+        ));
     }
 
     let repo = UserRepository::new(state.db.clone());

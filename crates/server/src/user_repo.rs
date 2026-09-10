@@ -1,4 +1,4 @@
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use common::error::{AppError, DbError};
 use turso::Database;
 
@@ -47,12 +47,12 @@ impl UserRepository {
                 let id = row
                     .get_value(0)
                     .map_err(|e| AppError::Internal(format!("Failed to get id: {}", e)))?;
-                let email = row.get_value(1).map_err(|e| {
-                    AppError::Internal(format!("Failed to get email: {}", e))
-                })?;
-                let name = row.get_value(2).map_err(|e| {
-                    AppError::Internal(format!("Failed to get name: {}", e))
-                })?;
+                let email = row
+                    .get_value(1)
+                    .map_err(|e| AppError::Internal(format!("Failed to get email: {}", e)))?;
+                let name = row
+                    .get_value(2)
+                    .map_err(|e| AppError::Internal(format!("Failed to get name: {}", e)))?;
                 let password_hash = row.get_value(3).map_err(|e| {
                     AppError::Internal(format!("Failed to get password_hash: {}", e))
                 })?;
@@ -75,7 +75,7 @@ impl UserRepository {
                         _ => {
                             return Err(AppError::Internal(
                                 "Invalid password_hash type".to_string(),
-                            ))
+                            ));
                         }
                     },
                 };
@@ -99,7 +99,11 @@ impl UserRepository {
         let result = conn
             .execute(
                 "INSERT INTO users (email, name, password_hash) VALUES (?1, ?2, ?3)",
-                (user.email.as_str(), user.name.as_str(), password_hash.as_str()),
+                (
+                    user.email.as_str(),
+                    user.name.as_str(),
+                    password_hash.as_str(),
+                ),
             )
             .await
             .map_err(|e| {
@@ -114,7 +118,6 @@ impl UserRepository {
     }
 
     pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool, AppError> {
-        verify(password, hash)
-            .map_err(|e| AppError::Database(DbError::PasswordHash(e.to_string())))
+        verify(password, hash).map_err(|e| AppError::Database(DbError::PasswordHash(e.to_string())))
     }
 }

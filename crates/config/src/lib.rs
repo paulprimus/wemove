@@ -48,8 +48,9 @@ impl AuthConfig {
     pub fn load() -> Self {
         dotenvy::dotenv().ok();
 
-        let jwt_secret = std::env::var("JWT_SECRET")
-            .expect("JWT_SECRET muss über die .env-Datei oder als Umgebungsvariable gesetzt werden");
+        let jwt_secret = std::env::var("JWT_SECRET").expect(
+            "JWT_SECRET muss über die .env-Datei oder als Umgebungsvariable gesetzt werden",
+        );
 
         let token_expiry_secs = std::env::var("TOKEN_EXPIRY_SECS")
             .ok()

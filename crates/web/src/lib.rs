@@ -1,8 +1,8 @@
 pub mod app;
 pub mod auth;
+pub mod components;
 pub mod dashboard;
 pub mod home;
-mod components;
 
 use topcoat::router::RouterBuilder;
 
@@ -13,5 +13,10 @@ use crate::dashboard::dashboard as dashboard_page;
 use crate::home::index;
 
 pub fn register(builder: RouterBuilder) -> RouterBuilder {
-    builder.layout(app_layout).page(index).page(login).page(register_page).page(dashboard_page)
+    builder
+        .layout(app_layout)
+        .page(index)
+        .page(login)
+        .page(register_page)
+        .page(dashboard_page)
 }
