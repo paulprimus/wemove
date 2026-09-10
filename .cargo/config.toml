@@ -1,2 +1,2 @@
 [env]
-TAILWINDCSS = { value = "node_modules/.bin/tailwindcss.cmd", relative = true }
+TAILWINDCSS = { value = "crates/web/node_modules/.bin/tailwindcss", relative = true }
