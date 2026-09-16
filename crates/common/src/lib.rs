@@ -7,6 +7,17 @@ pub use error::DbError;
 pub use serde::{Deserialize, Serialize};
 pub use utoipa::ToSchema;
 
+#[derive(Clone)]
+pub struct AuthState {
+    pub db: turso::Database,
+}
+
+#[derive(Debug, Clone)]
+pub struct CurrentUser {
+    pub name: String,
+    pub email: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct MainRequest {
     #[schema(example = json!({"name": "Paul"}))]

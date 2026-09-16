@@ -1,11 +1,19 @@
+use common::{AuthState, CurrentUser};
 use std::future::Future;
 use topcoat::router::Slot;
 use topcoat::view::View;
-use topcoat::{Result, context::Cx, router::layout, session, view::view};
+use topcoat::{
+    Result,
+    context::{Cx, try_app_context},
+    router::layout,
+    session,
+    view::view,
+};
 
 #[layout("/")]
 pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
-    let is_authenticated = session::token_hash(cx).await?.is_some();
+    let current_user = current_user(cx).await;
+    let is_authenticated = current_user.is_some();
     Ok(view! {
         <!DOCTYPE html>
         <html lang="en">
@@ -37,6 +45,9 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                                 </svg>
                             </button>
                         if is_authenticated {
+                            if let Some(user) = &current_user {
+                                <span class="hidden text-sm text-muted-foreground sm:inline">(user.name.as_str())</span>
+                            }
                             <details class="relative">
                                 <summary class="cursor-pointer list-none rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted">"Menu"</summary>
                                 <div class="absolute right-0 z-10 mt-2 w-44 rounded-xl border border-border bg-surface-strong p-2 shadow-sm">
@@ -60,4 +71,44 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
             </body>
         </html>
     })
+}
+
+async fn current_user(cx: &Cx) -> Option<CurrentUser> {
+    let hash = session::token_hash(cx).await.ok()??;
+    let auth_state = try_app_context::<AuthState>(cx)?;
+    let conn = auth_state.db.connect().ok()?;
+    let mut statement = conn
+        .prepare(
+            "SELECT users.name, users.email
+             FROM sessions
+             INNER JOIN users ON users.id = sessions.user_id
+             WHERE sessions.token_hash = ?1 AND sessions.expires_at > ?2",
+        )
+        .await
+        .ok()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    let mut rows = statement
+        .query((
+            hash.as_ref()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
+            now,
+        ))
+        .await
+        .ok()?;
+    let row = rows.next().await.ok()??;
+    let name = match row.get_value(0).ok()? {
+        turso::Value::Text(value) => value,
+        _ => return None,
+    };
+    let email = match row.get_value(1).ok()? {
+        turso::Value::Text(value) => value,
+        _ => return None,
+    };
+
+    Some(CurrentUser { name, email })
 }

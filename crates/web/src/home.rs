@@ -14,7 +14,9 @@ pub async fn index(cx: &Cx) -> Result<impl View> {
                 <p class="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">"WeMove brings projects, people, and the next step into one focused workspace."</p>
                 if is_authenticated {
                     <div class="mt-10 flex flex-wrap gap-4">
-                        <a href="/logout" class="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/85 focus:outline-none focus:ring-2 focus:ring-ring">"Sign out"</a>
+                        <form method="post" action="/auth/logout">
+                            <button type="submit" class="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/85 focus:outline-none focus:ring-2 focus:ring-ring">"Sign out"</button>
+                        </form>
 
                     </div>
                 } else {

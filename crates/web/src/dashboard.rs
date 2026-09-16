@@ -2,7 +2,7 @@ use topcoat::Result;
 use topcoat::context::Cx;
 use topcoat::router::{error::redirect, page};
 use topcoat::session;
-use topcoat::view::{View, view};
+use topcoat::view::{View, component, view};
 
 use crate::components::card::{CardConfig, card};
 
@@ -12,6 +12,11 @@ pub async fn dashboard(cx: &Cx) -> Result<impl View> {
         return Err(redirect("/login").into());
     }
 
+    Ok(view! { dashboard_view() })
+}
+
+#[component]
+pub async fn dashboard_view() -> Result<impl View> {
     Ok(view! {
         <main class="mx-auto max-w-6xl px-6 py-16">
             <div class="rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-12">

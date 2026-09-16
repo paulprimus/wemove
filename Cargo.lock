@@ -702,6 +702,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
+ "turso",
  "utoipa",
 ]
 
@@ -5013,8 +5014,10 @@ dependencies = [
 name = "web"
 version = "0.1.0"
 dependencies = [
+ "common",
  "serde",
  "topcoat",
+ "turso",
 ]
 
 [[package]]
