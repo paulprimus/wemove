@@ -29,21 +29,9 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4" aria-label="Main navigation">
                         <a href="/" class="text-lg font-semibold tracking-tight text-foreground">"WeMove"</a>
                         <div class="flex items-center gap-3">
-                            <button
-                                type="button"
-                                class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                                aria-label="Toggle color theme"
-                                title="Toggle color theme"
-                                @click="document.documentElement.classList.toggle('light')"
-                            >
-                                <svg class="theme-icon-moon size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                    <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path>
-                                </svg>
-                                <svg class="theme-icon-sun size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                    <circle cx="12" cy="12" r="3.5"></circle>
-                                    <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path>
-                                </svg>
-                            </button>
+
+
+
                         if is_authenticated {
                             if let Some(user) = &current_user {
                                 <span class="hidden text-sm text-muted-foreground sm:inline">(user.name.as_str())</span>
@@ -64,6 +52,22 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                                 <a href="/register" class="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/85">"Create account"</a>
                             </div>
                         }
+
+                        <button
+                                type="button"
+                                class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                aria-label="Toggle color theme"
+                                title="Toggle color theme"
+                                @click=$(|_e| raw!("document.documentElement.classList.toggle('light')"))
+                            >
+                                <svg class="theme-icon-moon size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                    <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path>
+                                </svg>
+                                <svg class="theme-icon-sun size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="3.5"></circle>
+                                    <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path>
+                                </svg>
+                            </button>
                         </div>
                     </nav>
                 </header>
