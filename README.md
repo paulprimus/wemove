@@ -24,7 +24,7 @@ cargo test --workspace
 
 ```bash
 # Install once (matching the workspace's Topcoat version)
-cargo install topcoat-cli@0.7 --locked
+cargo install topcoat-cli@0.9 --locked
 
 # Build Tailwind, bundle assets, and run the server
 topcoat dev
@@ -42,7 +42,7 @@ cargo build -p web
 This avoids the automatic GitHub download performed by Topcoat's default
 configuration and is useful in environments with TLS-inspecting proxies.
 
-For a manual server start, create the asset bundle after building:
+For a manual server start, create or refresh the asset bundle after building:
 
 ```bash
 topcoat asset bundle --package server

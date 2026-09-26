@@ -21,6 +21,7 @@ use topcoat::router::content::Form;
 use topcoat::router::error::{SeeOther, see_other};
 use topcoat::router::tower::TowerRoute;
 use topcoat::router::{Methods, Path, RouterBuilder, page, route};
+use topcoat::runtime::RouterBuilderRuntimeExt;
 use topcoat::serve;
 use topcoat::session::RouterBuilderSessionExt;
 use topcoat::session::{self, Session};
@@ -241,6 +242,7 @@ async fn main() -> anyhow::Result<()> {
         .route(logout)
         .route(TowerRoute::new(Methods::Any, Path::new("/{*rest}"), api))
         .assets(AssetBundle::load().expect("failed to load Topcoat asset bundle"))
+        .runtime()
         .build();
 
     let listener = TcpListener::bind(addr).await?;

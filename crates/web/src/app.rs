@@ -56,7 +56,7 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                                 class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 aria-label="Toggle color theme"
                                 title="Toggle color theme"
-                                @click=$(|_e| raw!("document.documentElement.classList.toggle('light')"))
+                                @click="document.documentElement.classList.toggle('light')"
                             >
                                 <svg class="theme-icon-moon size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                                     <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path>
