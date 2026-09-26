@@ -17,7 +17,7 @@ license = "MIT"
 [workspace.dependencies]
 anyhow = "1.0"
 axum = "0.8"
-topcoat = { version = "0.7", features = ["router", "tower", "view", "tailwind"] }
+topcoat = { version = "0.9", features = ["router", "tower", "view", "tailwind"] }
 turso = { version = "0.8.0-pre.8" }
 bcrypt = "0.19.3"
 jsonwebtoken = { version = "10", features = ["rust_crypto"], default-features = false }

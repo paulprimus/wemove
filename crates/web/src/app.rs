@@ -30,8 +30,6 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         <a href="/" class="text-lg font-semibold tracking-tight text-foreground">"WeMove"</a>
                         <div class="flex items-center gap-3">
 
-
-
                         if is_authenticated {
                             if let Some(user) = &current_user {
                                 <span class="hidden text-sm text-muted-foreground sm:inline">(user.name.as_str())</span>
