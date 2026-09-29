@@ -30,17 +30,18 @@ cargo install topcoat-cli@0.9 --locked
 topcoat dev
 ```
 
-The Tailwind build uses the locally installed npm CLI from
-`crates/web/node_modules/.bin/tailwindcss`. The project-local Cargo configuration
-sets `TAILWINDCSS` automatically:
+The Tailwind build uses the npm CLI installed by `npm install` in `crates/web`.
+The build script picks the right shim per OS (`tailwindcss` on Unix,
+`tailwindcss.cmd` on Windows); the `TAILWINDCSS` environment variable
+overrides it with a custom executable:
 
 ```bash
 npm install
 cargo build -p web
 ```
 
-This avoids the automatic GitHub download performed by Topcoat's default
-configuration and is useful in environments with TLS-inspecting proxies.
+Using the npm CLI avoids the automatic GitHub download performed by Topcoat's
+default configuration and is useful in environments with TLS-inspecting proxies.
 
 For a manual server start, create or refresh the asset bundle after building:
 
