@@ -1,8 +1,7 @@
 use common::{AuthState, CurrentUser};
 use std::future::Future;
 use topcoat::router::Slot;
-use topcoat::runtime::signal;
-use topcoat::view::View;
+use topcoat::view::{Unescaped, View};
 use topcoat::{
     Result,
     context::{Cx, try_app_context},
@@ -11,39 +10,38 @@ use topcoat::{
     view::view,
 };
 
-#[derive(Clone, Copy)]
-enum Theme {
-    Dark,
-    Light,
-}
+const THEME_SCRIPT: &str = r#"<script>
+(() => {
+    const storageKey = "wemove-theme";
+    document.documentElement.classList.toggle(
+        "light",
+        window.localStorage.getItem(storageKey) === "light",
+    );
 
-impl Theme {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Dark => "dark",
-            Self::Light => "light",
+    document.addEventListener("click", (event) => {
+        if (!(event.target instanceof Element) || !event.target.closest("[data-theme-toggle]")) {
+            return;
         }
-    }
-}
+
+        const isLight = document.documentElement.classList.toggle("light");
+        window.localStorage.setItem(storageKey, isLight ? "light" : "dark");
+    });
+})();
+</script>"#;
 
 #[layout("/")]
 pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let current_user = current_user(cx).await;
     let is_authenticated = current_user.is_some();
-    let dark_theme = Theme::Dark.name();
-    let light_theme = Theme::Light.name();
-    let theme = signal(cx, || dark_theme.to_owned());
     Ok(view! {
         <!DOCTYPE html>
-        <html
-            lang="en"
-            :class=$(if theme.get() == light_theme { "light" } else { "" })
-        >
+        <html lang="en">
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>"WeMove"</title>
                 topcoat::runtime::script()
+                (Unescaped::new_unchecked(THEME_SCRIPT))
                 <link rel="stylesheet" href=(topcoat::tailwind::stylesheet!())>
             </head>
             <body class="min-h-screen bg-background text-foreground antialiased">
@@ -78,11 +76,7 @@ pub async fn app_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                                 class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 aria-label="Toggle color theme"
                                 title="Toggle color theme"
-                                @click=$(|_e| theme.set(if theme.get() == dark_theme {
-                                    light_theme.to_owned()
-                                } else {
-                                    dark_theme.to_owned()
-                                }))
+                                data-theme-toggle=""
                             >
                                 <svg class="theme-icon-moon size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                                     <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path>

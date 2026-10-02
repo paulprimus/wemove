@@ -3,6 +3,7 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-env-changed=TAILWINDCSS");
     println!("cargo:rerun-if-changed=styles.css");
+    println!("cargo:rerun-if-changed=src");
 
     let config = topcoat::tailwind::BuildConfig::new().input("styles.css");
 
@@ -18,7 +19,8 @@ fn main() {
 
 fn npm_shim() -> PathBuf {
     let manifest_dir = PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set for build scripts"),
+        std::env::var_os("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR is set for build scripts"),
     );
     let shim = if cfg!(windows) {
         "tailwindcss.cmd"

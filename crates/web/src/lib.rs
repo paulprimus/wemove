@@ -1,5 +1,6 @@
 pub mod app;
 pub mod auth;
+pub mod boards;
 pub mod components;
 pub mod dashboard;
 pub mod home;
