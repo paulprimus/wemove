@@ -3,6 +3,7 @@ mod board_repo;
 mod error;
 mod handlers;
 mod openapi;
+mod project_repo;
 mod routes;
 mod state;
 mod user_repo;
@@ -22,7 +23,7 @@ use topcoat::router::content::Form;
 use topcoat::router::error::internal_server_error;
 use topcoat::router::error::{SeeOther, see_other};
 use topcoat::router::tower::TowerRoute;
-use topcoat::router::{Methods, Path, RouterBuilder, page, parse_query_params, route};
+use topcoat::router::{Methods, Path, RouterBuilder, page, parse_query_params, path_param, route};
 use topcoat::runtime::RouterBuilderRuntimeExt;
 use topcoat::serve;
 use topcoat::session::RouterBuilderSessionExt;
@@ -36,6 +37,7 @@ use web::auth::login::login as login_page;
 use web::auth::register::register as register_page;
 use web::boards::new::create_board_form;
 use web::home::index;
+use web::projects::new::create_project_form;
 
 #[derive(serde::Deserialize)]
 struct BoardPageQuery {
@@ -46,6 +48,14 @@ struct BoardPageQuery {
 struct CreateBoardForm {
     name: String,
 }
+
+#[derive(serde::Deserialize)]
+struct CreateProjectForm {
+    name: String,
+}
+
+path_param!(board_id: i64, error = not_found);
+path_param!(project_id: i64, error = not_found);
 
 #[derive(Debug, PartialEq)]
 enum BoardNameError {
@@ -120,37 +130,125 @@ async fn dashboard(cx: &Cx) -> Result<impl View> {
             return Err(internal_server_error(std::io::Error::other(error)).into());
         }
     };
-    let boards = board_repo::BoardRepository::new(state.db.clone())
+    let projects = project_repo::ProjectRepository::new(state.db.clone())
         .list_for_user(user_id)
         .await
         .map_err(|error| {
-            tracing::error!("Failed to load user boards: {}", error);
+            tracing::error!("Failed to load user projects: {}", error);
             internal_server_error(error)
         })?;
 
-    Ok(view! { web::dashboard::dashboard_view(boards: boards) })
+    let projects = projects
+        .into_iter()
+        .map(|project| web::dashboard::ProjectSummary {
+            id: project.id,
+            name: project.name,
+        })
+        .collect();
+
+    Ok(view! { web::dashboard::dashboard_view(projects: projects) })
 }
 
-#[page("/boards/new")]
-async fn new_board_page(cx: &Cx) -> Result<impl View> {
+#[page("/projects/new")]
+async fn new_project_page(cx: &Cx) -> Result<impl View> {
     let state = topcoat::context::app_context::<AppState>(cx);
     let Some(hash) = session::token_hash(cx).await? else {
         return Err(topcoat::router::error::redirect("/login").into());
     };
-    match session_user_id(state, &hash).await {
-        Ok(Some(_)) => {}
-        Ok(None) => return Err(topcoat::router::error::redirect("/login").into()),
-        Err(error) => {
-            tracing::error!("Failed to verify board creation session: {}", error);
-            return Err(internal_server_error(std::io::Error::other(error)).into());
-        }
+    if session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .is_none()
+    {
+        return Err(topcoat::router::error::redirect("/login").into());
     }
-
     let error = parse_query_params::<BoardPageQuery>(cx)
         .ok()
         .and_then(|query| query.error);
+    Ok(view! { create_project_form(error: error) })
+}
 
-    Ok(view! { create_board_form(error: error) })
+#[page("/projects/{project_id}")]
+async fn project_page(cx: &Cx) -> Result<impl View> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let id = *path_param::<ProjectId>(cx)?;
+    let project = project_repo::ProjectRepository::new(state.db.clone())
+        .find_for_user(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .ok_or_else(topcoat::router::error::not_found)?;
+    let boards = board_repo::BoardRepository::new(state.db.clone())
+        .list_for_project(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .into_iter()
+        .map(|board| web::projects::view::BoardSummary {
+            id: board.id,
+            name: board.name,
+        })
+        .collect();
+    Ok(
+        view! { web::projects::view::project_view(project_id: project.id, name: project.name.as_str(), boards: boards) },
+    )
+}
+
+#[page("/projects/{project_id}/boards/new")]
+async fn new_project_board_page(cx: &Cx) -> Result<impl View> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let id = *path_param::<ProjectId>(cx)?;
+    if project_repo::ProjectRepository::new(state.db.clone())
+        .find_for_user(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .is_none()
+    {
+        return Err(topcoat::router::error::not_found().into());
+    }
+    let error = parse_query_params::<BoardPageQuery>(cx)
+        .ok()
+        .and_then(|query| query.error);
+    Ok(view! { create_board_form(project_id: id, error: error) })
+}
+
+#[page("/boards/{board_id}")]
+async fn board_page(cx: &Cx) -> Result<impl View> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = match session_user_id(state, &hash).await {
+        Ok(Some(user_id)) => user_id,
+        Ok(None) => return Err(topcoat::router::error::redirect("/login").into()),
+        Err(error) => {
+            tracing::error!("Failed to verify board session: {}", error);
+            return Err(internal_server_error(std::io::Error::other(error)).into());
+        }
+    };
+    let id = path_param::<BoardId>(cx)?;
+    let board = board_repo::BoardRepository::new(state.db.clone())
+        .find_for_user(user_id, *id)
+        .await
+        .map_err(|error| {
+            tracing::error!("Failed to load board {}: {}", id, error);
+            internal_server_error(error)
+        })?
+        .ok_or_else(topcoat::router::error::not_found)?;
+
+    Ok(view! { web::boards::view::board_view(name: board.name.as_str()) })
 }
 
 async fn session_user_id(
@@ -180,35 +278,68 @@ async fn session_user_id(
     }
 }
 
-#[route(POST "/boards/new")]
-async fn create_board(cx: &Cx, Form(payload): Form<CreateBoardForm>) -> Result<SeeOther> {
+#[route(POST "/projects/{project_id}/boards")]
+async fn create_project_board(cx: &Cx, Form(payload): Form<CreateBoardForm>) -> Result<SeeOther> {
+    let project_id = *path_param::<ProjectId>(cx)?;
     let name = match validate_board_name(&payload.name) {
         Ok(name) => name,
-        Err(BoardNameError::Empty) => return Ok(see_other("/boards/new?error=empty_name")),
-        Err(BoardNameError::TooLong) => return Ok(see_other("/boards/new?error=name_too_long")),
+        Err(BoardNameError::Empty) => {
+            return Ok(see_other(&format!(
+                "/projects/{project_id}/boards/new?error=empty_name"
+            )));
+        }
+        Err(BoardNameError::TooLong) => {
+            return Ok(see_other(&format!(
+                "/projects/{project_id}/boards/new?error=name_too_long"
+            )));
+        }
     };
-
     let state = topcoat::context::app_context::<AppState>(cx);
     let Some(hash) = session::token_hash(cx).await? else {
         return Ok(see_other("/login"));
     };
-    let user_id = match session_user_id(state, &hash).await {
-        Ok(Some(user_id)) => user_id,
-        Ok(None) => return Ok(see_other("/login")),
-        Err(error) => {
-            tracing::error!("Failed to verify board creation session: {}", error);
-            return Err(internal_server_error(std::io::Error::other(error)).into());
-        }
-    };
-
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
     if let Err(error) = board_repo::BoardRepository::new(state.db.clone())
+        .create_for_project(user_id, project_id, name)
+        .await
+    {
+        tracing::error!(
+            "Failed to create board in project {}: {}",
+            project_id,
+            error
+        );
+        return Ok(see_other(&format!(
+            "/projects/{project_id}/boards/new?error=storage"
+        )));
+    }
+    Ok(see_other(&format!("/projects/{project_id}")))
+}
+
+#[route(POST "/projects/new")]
+async fn create_project(cx: &Cx, Form(payload): Form<CreateProjectForm>) -> Result<SeeOther> {
+    let name = match validate_board_name(&payload.name) {
+        Ok(name) => name,
+        Err(BoardNameError::Empty) => return Ok(see_other("/projects/new?error=empty_name")),
+        Err(BoardNameError::TooLong) => return Ok(see_other("/projects/new?error=name_too_long")),
+    };
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Ok(see_other("/login"));
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    if let Err(error) = project_repo::ProjectRepository::new(state.db.clone())
         .create_for_user(user_id, name)
         .await
     {
-        tracing::error!("Failed to create board for user {}: {}", user_id, error);
-        return Ok(see_other("/boards/new?error=storage"));
+        tracing::error!("Failed to create project for user {}: {}", user_id, error);
+        return Ok(see_other("/projects/new?error=storage"));
     }
-
     Ok(see_other("/dashboard"))
 }
 
@@ -299,7 +430,10 @@ async fn main() -> anyhow::Result<()> {
         .page(login_page)
         .page(register_page)
         .page(dashboard)
-        .page(new_board_page)
+        .page(new_project_page)
+        .page(project_page)
+        .page(new_project_board_page)
+        .page(board_page)
         .cookies()
         .app_context(auth_state)
         .app_context(state)
@@ -310,7 +444,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .route(login)
         .route(register)
-        .route(create_board)
+        .route(create_project)
+        .route(create_project_board)
         .route(logout)
         .route(TowerRoute::new(Methods::Any, Path::new("/{*rest}"), api))
         .assets(AssetBundle::load().expect("failed to load Topcoat asset bundle"))

@@ -4,6 +4,7 @@ pub mod boards;
 pub mod components;
 pub mod dashboard;
 pub mod home;
+pub mod projects;
 
 use topcoat::router::RouterBuilder;
 

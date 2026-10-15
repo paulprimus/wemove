@@ -2,7 +2,7 @@ use topcoat::Result;
 use topcoat::view::{View, component, view};
 
 #[component]
-pub async fn create_board_form(error: Option<String>) -> Result<impl View> {
+pub async fn create_board_form(project_id: i64, error: Option<String>) -> Result<impl View> {
     let error_message = error.map(|error| match error.as_str() {
         "empty_name" => "Enter a name for your board.",
         "name_too_long" => "Board names must be 100 characters or fewer.",
@@ -19,7 +19,7 @@ pub async fn create_board_form(error: Option<String>) -> Result<impl View> {
                 if let Some(message) = error_message {
                     <div class="mt-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">(message)</div>
                 }
-                <form method="post" action="/boards/new" class="mt-8 space-y-5">
+                <form method="post" action=(format!("/projects/{project_id}/boards")) class="mt-8 space-y-5">
                     <div>
                         <label for="board-name" class="mb-2 block text-sm font-medium text-foreground">"Board name"</label>
                         <input

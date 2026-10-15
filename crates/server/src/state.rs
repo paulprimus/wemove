@@ -73,7 +73,20 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
 
     create_session_table(&conn).await?;
 
+    create_project_table(&conn).await?;
+
     create_board_table(&conn).await?;
+
+    // Keep databases created before projects were introduced usable.
+    if let Err(error) = conn
+        .execute("ALTER TABLE boards ADD COLUMN project_id INTEGER", ())
+        .await
+    {
+        let message = error.to_string();
+        if !message.contains("duplicate column") {
+            return Err(AppError::Database(DbError::Query(message)));
+        }
+    }
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id)",
@@ -86,15 +99,40 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
     Ok(())
 }
 
-async fn create_board_table(conn: &Connection) -> Result<(), AppError> {
+async fn create_project_table(conn: &Connection) -> Result<(), AppError> {
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS boards (
+        "CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    Ok(())
+}
+
+async fn create_board_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS boards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER,
+            name TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         )",
         (),
     )
