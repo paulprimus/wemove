@@ -2,7 +2,7 @@ use topcoat::Result;
 use topcoat::view::{View, component, view};
 
 #[component]
-pub async fn create_project_form(error: Option<String>) -> Result<impl View> {
+pub async fn create_project_form(workspace_id: i64, error: Option<String>) -> Result<impl View> {
     let error_message = error.map(|error| match error.as_str() {
         "empty_name" => "Enter a name for your project.",
         "name_too_long" => "Project names must be 100 characters or fewer.",
@@ -18,7 +18,7 @@ pub async fn create_project_form(error: Option<String>) -> Result<impl View> {
                 if let Some(message) = error_message {
                     <div class="mt-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">(message)</div>
                 }
-                <form method="post" action="/projects/new" class="mt-8 space-y-5">
+                <form method="post" action=(format!("/workspaces/{workspace_id}/projects")) class="mt-8 space-y-5">
                     <label for="project-name" class="block text-sm font-medium text-foreground">"Project name"</label>
                     <input type="text" id="project-name" name="name" required="" autofocus="" maxlength="100" class="w-full rounded-lg border border-border bg-surface-strong px-4 py-3 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="e.g. Product launch">
                     <div class="flex justify-end gap-3">

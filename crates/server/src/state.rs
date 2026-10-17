@@ -73,9 +73,50 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
 
     create_session_table(&conn).await?;
 
+    create_workspace_table(&conn).await?;
+
     create_project_table(&conn).await?;
 
     create_board_table(&conn).await?;
+
+    if let Err(error) = conn
+        .execute("ALTER TABLE projects ADD COLUMN workspace_id INTEGER", ())
+        .await
+    {
+        let message = error.to_string();
+        if !message.contains("duplicate column") {
+            return Err(AppError::Database(DbError::Query(message)));
+        }
+    }
+
+    // Put records from older versions into a personal workspace so existing
+    // projects and boards remain visible after the hierarchy migration.
+    conn.execute(
+        "INSERT INTO workspaces (user_id, name)
+         SELECT DISTINCT user_id, 'Personal workspace'
+         FROM projects
+         WHERE workspace_id IS NULL
+           AND user_id NOT IN (SELECT user_id FROM workspaces)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    conn.execute(
+        "UPDATE projects
+         SET workspace_id = (SELECT id FROM workspaces WHERE workspaces.user_id = projects.user_id ORDER BY id LIMIT 1)
+         WHERE workspace_id IS NULL",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    conn.execute(
+        "UPDATE boards
+         SET project_id = (SELECT id FROM projects WHERE projects.user_id = boards.user_id ORDER BY id LIMIT 1)
+         WHERE project_id IS NULL",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
 
     // Keep databases created before projects were introduced usable.
     if let Err(error) = conn
@@ -99,15 +140,40 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
     Ok(())
 }
 
-async fn create_project_table(conn: &Connection) -> Result<(), AppError> {
+async fn create_workspace_table(conn: &Connection) -> Result<(), AppError> {
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS projects (
+        "CREATE TABLE IF NOT EXISTS workspaces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workspaces_user_id ON workspaces(user_id)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    Ok(())
+}
+
+async fn create_project_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            workspace_id INTEGER,
+            name TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
         )",
         (),
     )

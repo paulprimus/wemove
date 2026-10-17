@@ -30,6 +30,25 @@ impl ProjectRepository {
         Ok(())
     }
 
+    pub async fn create_for_workspace(
+        &self,
+        user_id: i64,
+        workspace_id: i64,
+        name: &str,
+    ) -> Result<(), AppError> {
+        let conn = self
+            .db
+            .connect()
+            .map_err(|e| AppError::Database(DbError::Connection(e.to_string())))?;
+        conn.execute(
+            "INSERT INTO projects (user_id, workspace_id, name) SELECT ?1, id, ?3 FROM workspaces WHERE id = ?2 AND user_id = ?1",
+            (user_id, workspace_id, name),
+        )
+        .await
+        .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+        Ok(())
+    }
+
     pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Project>, AppError> {
         let conn = self
             .db
@@ -65,6 +84,54 @@ impl ProjectRepository {
                 .map_err(|error| AppError::Database(DbError::Query(error.to_string())))?
             {
                 turso::Value::Text(name) => name,
+                value => {
+                    return Err(AppError::Database(DbError::Query(format!(
+                        "Invalid project name: {value:?}"
+                    ))));
+                }
+            };
+            projects.push(Project { id, name });
+        }
+        Ok(projects)
+    }
+
+    pub async fn list_for_workspace(
+        &self,
+        user_id: i64,
+        workspace_id: i64,
+    ) -> Result<Vec<Project>, AppError> {
+        let conn = self
+            .db
+            .connect()
+            .map_err(|e| AppError::Database(DbError::Connection(e.to_string())))?;
+        let mut statement = conn.prepare("SELECT id, name FROM projects WHERE user_id = ?1 AND workspace_id = ?2 ORDER BY id DESC").await
+            .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+        let mut rows = statement
+            .query((user_id, workspace_id))
+            .await
+            .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+        let mut projects = Vec::new();
+        while let Some(row) = rows
+            .next()
+            .await
+            .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?
+        {
+            let id = match row
+                .get_value(0)
+                .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?
+            {
+                turso::Value::Integer(value) => value,
+                value => {
+                    return Err(AppError::Database(DbError::Query(format!(
+                        "Invalid project ID: {value:?}"
+                    ))));
+                }
+            };
+            let name = match row
+                .get_value(1)
+                .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?
+            {
+                turso::Value::Text(value) => value,
                 value => {
                     return Err(AppError::Database(DbError::Query(format!(
                         "Invalid project name: {value:?}"

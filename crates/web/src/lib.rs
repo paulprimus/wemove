@@ -5,6 +5,7 @@ pub mod components;
 pub mod dashboard;
 pub mod home;
 pub mod projects;
+pub mod workspaces;
 
 use topcoat::router::RouterBuilder;
 

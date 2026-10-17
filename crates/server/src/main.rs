@@ -7,6 +7,7 @@ mod project_repo;
 mod routes;
 mod state;
 mod user_repo;
+mod workspace_repo;
 
 use std::time::Duration;
 
@@ -38,6 +39,7 @@ use web::auth::register::register as register_page;
 use web::boards::new::create_board_form;
 use web::home::index;
 use web::projects::new::create_project_form;
+use web::workspaces::new::create_workspace_form;
 
 #[derive(serde::Deserialize)]
 struct BoardPageQuery {
@@ -54,8 +56,14 @@ struct CreateProjectForm {
     name: String,
 }
 
+#[derive(serde::Deserialize)]
+struct CreateWorkspaceForm {
+    name: String,
+}
+
 path_param!(board_id: i64, error = not_found);
 path_param!(project_id: i64, error = not_found);
+path_param!(workspace_id: i64, error = not_found);
 
 #[derive(Debug, PartialEq)]
 enum BoardNameError {
@@ -130,27 +138,27 @@ async fn dashboard(cx: &Cx) -> Result<impl View> {
             return Err(internal_server_error(std::io::Error::other(error)).into());
         }
     };
-    let projects = project_repo::ProjectRepository::new(state.db.clone())
+    let workspaces = workspace_repo::WorkspaceRepository::new(state.db.clone())
         .list_for_user(user_id)
         .await
         .map_err(|error| {
-            tracing::error!("Failed to load user projects: {}", error);
+            tracing::error!("Failed to load user workspaces: {}", error);
             internal_server_error(error)
         })?;
 
-    let projects = projects
+    let workspaces = workspaces
         .into_iter()
-        .map(|project| web::dashboard::ProjectSummary {
-            id: project.id,
-            name: project.name,
+        .map(|workspace| web::dashboard::WorkspaceSummary {
+            id: workspace.id,
+            name: workspace.name,
         })
         .collect();
 
-    Ok(view! { web::dashboard::dashboard_view(projects: projects) })
+    Ok(view! { web::dashboard::dashboard_view(workspaces: workspaces) })
 }
 
-#[page("/projects/new")]
-async fn new_project_page(cx: &Cx) -> Result<impl View> {
+#[page("/workspaces/new")]
+async fn new_workspace_page(cx: &Cx) -> Result<impl View> {
     let state = topcoat::context::app_context::<AppState>(cx);
     let Some(hash) = session::token_hash(cx).await? else {
         return Err(topcoat::router::error::redirect("/login").into());
@@ -165,7 +173,63 @@ async fn new_project_page(cx: &Cx) -> Result<impl View> {
     let error = parse_query_params::<BoardPageQuery>(cx)
         .ok()
         .and_then(|query| query.error);
-    Ok(view! { create_project_form(error: error) })
+    Ok(view! { create_workspace_form(error: error) })
+}
+
+#[page("/workspaces/{workspace_id}")]
+async fn workspace_page(cx: &Cx) -> Result<impl View> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let id = *path_param::<WorkspaceId>(cx)?;
+    let workspace = workspace_repo::WorkspaceRepository::new(state.db.clone())
+        .find_for_user(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .ok_or_else(topcoat::router::error::not_found)?;
+    let projects = project_repo::ProjectRepository::new(state.db.clone())
+        .list_for_workspace(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .into_iter()
+        .map(|project| web::workspaces::view::ProjectSummary {
+            id: project.id,
+            name: project.name,
+        })
+        .collect();
+    Ok(
+        view! { web::workspaces::view::workspace_view(id: workspace.id, name: workspace.name.as_str(), projects: projects) },
+    )
+}
+
+#[page("/workspaces/{workspace_id}/projects/new")]
+async fn new_workspace_project_page(cx: &Cx) -> Result<impl View> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let id = *path_param::<WorkspaceId>(cx)?;
+    if workspace_repo::WorkspaceRepository::new(state.db.clone())
+        .find_for_user(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .is_none()
+    {
+        return Err(topcoat::router::error::not_found().into());
+    }
+    let error = parse_query_params::<BoardPageQuery>(cx)
+        .ok()
+        .and_then(|query| query.error);
+    Ok(view! { create_project_form(workspace_id: id, error: error) })
 }
 
 #[page("/projects/{project_id}")]
@@ -318,12 +382,51 @@ async fn create_project_board(cx: &Cx, Form(payload): Form<CreateBoardForm>) -> 
     Ok(see_other(&format!("/projects/{project_id}")))
 }
 
-#[route(POST "/projects/new")]
-async fn create_project(cx: &Cx, Form(payload): Form<CreateProjectForm>) -> Result<SeeOther> {
+#[route(POST "/workspaces/new")]
+async fn create_workspace(cx: &Cx, Form(payload): Form<CreateWorkspaceForm>) -> Result<SeeOther> {
     let name = match validate_board_name(&payload.name) {
         Ok(name) => name,
-        Err(BoardNameError::Empty) => return Ok(see_other("/projects/new?error=empty_name")),
-        Err(BoardNameError::TooLong) => return Ok(see_other("/projects/new?error=name_too_long")),
+        Err(BoardNameError::Empty) => return Ok(see_other("/workspaces/new?error=empty_name")),
+        Err(BoardNameError::TooLong) => {
+            return Ok(see_other("/workspaces/new?error=name_too_long"));
+        }
+    };
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Ok(see_other("/login"));
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    if let Err(error) = workspace_repo::WorkspaceRepository::new(state.db.clone())
+        .create_for_user(user_id, name)
+        .await
+    {
+        tracing::error!("Failed to create workspace for user {}: {}", user_id, error);
+        return Ok(see_other("/workspaces/new?error=storage"));
+    }
+    Ok(see_other("/dashboard"))
+}
+
+#[route(POST "/workspaces/{workspace_id}/projects")]
+async fn create_workspace_project(
+    cx: &Cx,
+    Form(payload): Form<CreateProjectForm>,
+) -> Result<SeeOther> {
+    let workspace_id = *path_param::<WorkspaceId>(cx)?;
+    let name = match validate_board_name(&payload.name) {
+        Ok(name) => name,
+        Err(BoardNameError::Empty) => {
+            return Ok(see_other(&format!(
+                "/workspaces/{workspace_id}/projects/new?error=empty_name"
+            )));
+        }
+        Err(BoardNameError::TooLong) => {
+            return Ok(see_other(&format!(
+                "/workspaces/{workspace_id}/projects/new?error=name_too_long"
+            )));
+        }
     };
     let state = topcoat::context::app_context::<AppState>(cx);
     let Some(hash) = session::token_hash(cx).await? else {
@@ -334,13 +437,19 @@ async fn create_project(cx: &Cx, Form(payload): Form<CreateProjectForm>) -> Resu
         .map_err(|error| internal_server_error(std::io::Error::other(error)))?
         .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
     if let Err(error) = project_repo::ProjectRepository::new(state.db.clone())
-        .create_for_user(user_id, name)
+        .create_for_workspace(user_id, workspace_id, name)
         .await
     {
-        tracing::error!("Failed to create project for user {}: {}", user_id, error);
-        return Ok(see_other("/projects/new?error=storage"));
+        tracing::error!(
+            "Failed to create project in workspace {}: {}",
+            workspace_id,
+            error
+        );
+        return Ok(see_other(&format!(
+            "/workspaces/{workspace_id}/projects/new?error=storage"
+        )));
     }
-    Ok(see_other("/dashboard"))
+    Ok(see_other(&format!("/workspaces/{workspace_id}")))
 }
 
 async fn persist_session(state: &AppState, user_id: i64, session: &Session) -> Result<(), String> {
@@ -430,7 +539,9 @@ async fn main() -> anyhow::Result<()> {
         .page(login_page)
         .page(register_page)
         .page(dashboard)
-        .page(new_project_page)
+        .page(new_workspace_page)
+        .page(workspace_page)
+        .page(new_workspace_project_page)
         .page(project_page)
         .page(new_project_board_page)
         .page(board_page)
@@ -444,7 +555,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .route(login)
         .route(register)
-        .route(create_project)
+        .route(create_workspace)
+        .route(create_workspace_project)
         .route(create_project_board)
         .route(logout)
         .route(TowerRoute::new(Methods::Any, Path::new("/{*rest}"), api))
