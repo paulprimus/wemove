@@ -33,7 +33,9 @@ impl UserRepository {
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let mut stmt = conn
-            .prepare("SELECT id, email, name, password_hash FROM users WHERE email = ?1")
+            .prepare(
+                "SELECT id, email, name, password_hash FROM users WHERE lower(email) = lower(?1)",
+            )
             .await
             .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
 

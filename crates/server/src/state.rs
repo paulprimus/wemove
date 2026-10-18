@@ -75,7 +75,19 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
 
     create_workspace_table(&conn).await?;
 
+    create_workspace_members_table(&conn).await?;
+
     create_project_table(&conn).await?;
+
+    create_project_members_table(&conn).await?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO project_members (project_id, user_id, role)
+         SELECT id, user_id, 'owner' FROM projects",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
 
     create_board_table(&conn).await?;
 
@@ -97,6 +109,15 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
          FROM projects
          WHERE workspace_id IS NULL
            AND user_id NOT IN (SELECT user_id FROM workspaces)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    // Preserve ownership for existing workspaces and for personal workspaces
+    // created above during the hierarchy migration.
+    conn.execute(
+        "INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role)
+         SELECT id, user_id, 'admin' FROM workspaces",
         (),
     )
     .await
@@ -156,6 +177,30 @@ async fn create_workspace_table(conn: &Connection) -> Result<(), AppError> {
     .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_workspaces_user_id ON workspaces(user_id)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    Ok(())
+}
+
+async fn create_workspace_members_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_members (
+            workspace_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (workspace_id, user_id),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON workspace_members(user_id)",
         (),
     )
     .await
@@ -239,6 +284,32 @@ async fn create_session_table(conn: &Connection) -> Result<(), AppError> {
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+
+    Ok(())
+}
+
+async fn create_project_members_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS project_members (
+            project_id integer not null,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (project_id, user_id),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id)",
         (),
     )
     .await

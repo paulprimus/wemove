@@ -61,6 +61,28 @@ struct CreateWorkspaceForm {
     name: String,
 }
 
+#[derive(serde::Deserialize)]
+struct AddProjectMemberForm {
+    email: String,
+    role: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ChangeProjectMemberForm {
+    user_id: i64,
+    role: String,
+}
+
+#[derive(serde::Deserialize)]
+struct RemoveProjectMemberForm {
+    user_id: i64,
+}
+
+#[derive(serde::Deserialize)]
+struct ProjectPageQuery {
+    member_error: Option<String>,
+}
+
 path_param!(board_id: i64, error = not_found);
 path_param!(project_id: i64, error = not_found);
 path_param!(workspace_id: i64, error = not_found);
@@ -258,9 +280,185 @@ async fn project_page(cx: &Cx) -> Result<impl View> {
             name: board.name,
         })
         .collect();
-    Ok(
-        view! { web::projects::view::project_view(project_id: project.id, name: project.name.as_str(), boards: boards) },
-    )
+    let members = project_repo::ProjectRepository::new(state.db.clone())
+        .list_members(id)
+        .await
+        .map_err(internal_server_error)?
+        .into_iter()
+        .map(|member| web::projects::view::ProjectMemberSummary {
+            user_id: member.user_id,
+            name: member.name,
+            email: member.email,
+            role: member.role,
+        })
+        .collect();
+    Ok(view! { web::projects::view::project_view(
+        project_id: project.id,
+        name: project.name.as_str(),
+        boards: boards,
+        members: members,
+    ) })
+}
+
+#[page("/projects/{project_id}/members")]
+async fn project_members_page(cx: &Cx) -> Result<impl View> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let id = *path_param::<ProjectId>(cx)?;
+    let project = project_repo::ProjectRepository::new(state.db.clone())
+        .find_for_user(user_id, id)
+        .await
+        .map_err(internal_server_error)?
+        .ok_or_else(topcoat::router::error::not_found)?;
+    let repository = project_repo::ProjectRepository::new(state.db.clone());
+    let role = repository
+        .role_for_user(id, user_id)
+        .await
+        .map_err(internal_server_error)?;
+    let members = repository
+        .list_members(id)
+        .await
+        .map_err(internal_server_error)?
+        .into_iter()
+        .map(|member| web::projects::view::ProjectMemberSummary {
+            user_id: member.user_id,
+            name: member.name,
+            email: member.email,
+            role: member.role,
+        })
+        .collect();
+    let member_error = parse_query_params::<ProjectPageQuery>(cx)
+        .ok()
+        .and_then(|query| query.member_error);
+    Ok(view! { web::projects::view::project_members_view(
+        project_id: project.id,
+        name: project.name.as_str(),
+        members: members,
+        can_manage_members: matches!(role.as_deref(), Some("owner" | "admin")),
+        member_error: member_error,
+    ) })
+}
+
+async fn require_project_manager(cx: &Cx, project_id: i64) -> Result<i64> {
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Err(topcoat::router::error::redirect("/login").into());
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let role = project_repo::ProjectRepository::new(state.db.clone())
+        .role_for_user(project_id, user_id)
+        .await
+        .map_err(internal_server_error)?;
+    if matches!(role.as_deref(), Some("owner" | "admin")) {
+        Ok(user_id)
+    } else {
+        Err(topcoat::router::error::forbidden().into())
+    }
+}
+
+fn valid_project_role(role: &str) -> bool {
+    matches!(role, "admin" | "member" | "viewer")
+}
+
+#[route(POST "/projects/{project_id}/members/add")]
+async fn add_project_member(
+    cx: &Cx,
+    Form(payload): Form<AddProjectMemberForm>,
+) -> Result<SeeOther> {
+    let project_id = *path_param::<ProjectId>(cx)?;
+    let actor_id = require_project_manager(cx, project_id).await?;
+    let email = payload.email.trim();
+    if email.is_empty() {
+        return Ok(see_other(&format!(
+            "/projects/{project_id}?member_error=invalid_email"
+        )));
+    }
+    if !valid_project_role(&payload.role) {
+        return Ok(see_other(&format!(
+            "/projects/{project_id}?member_error=invalid_role"
+        )));
+    }
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let user = match UserRepository::new(state.db.clone())
+        .find_by_email(email)
+        .await
+    {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return Ok(see_other(&format!(
+                "/projects/{project_id}?member_error=user_not_found"
+            )));
+        }
+        Err(error) => return Err(internal_server_error(error).into()),
+    };
+    let repository = project_repo::ProjectRepository::new(state.db.clone());
+    if repository
+        .role_for_user(project_id, user.id)
+        .await
+        .map_err(internal_server_error)?
+        .is_some()
+    {
+        return Ok(see_other(&format!(
+            "/projects/{project_id}?member_error=already_member"
+        )));
+    }
+    repository
+        .ensure_workspace_member(project_id, user.id)
+        .await
+        .map_err(internal_server_error)?;
+    repository
+        .add_member(project_id, user.id, &payload.role)
+        .await
+        .map_err(internal_server_error)?;
+    tracing::info!(
+        "User {} added user {} to project {}",
+        actor_id,
+        user.id,
+        project_id
+    );
+    Ok(see_other(&format!("/projects/{project_id}")))
+}
+
+#[route(POST "/projects/{project_id}/members/update")]
+async fn update_project_member(
+    cx: &Cx,
+    Form(payload): Form<ChangeProjectMemberForm>,
+) -> Result<SeeOther> {
+    let project_id = *path_param::<ProjectId>(cx)?;
+    require_project_manager(cx, project_id).await?;
+    if !valid_project_role(&payload.role) {
+        return Ok(see_other(&format!(
+            "/projects/{project_id}?member_error=invalid_role"
+        )));
+    }
+    project_repo::ProjectRepository::new(topcoat::context::app_context::<AppState>(cx).db.clone())
+        .update_member_role(project_id, payload.user_id, &payload.role)
+        .await
+        .map_err(internal_server_error)?;
+    Ok(see_other(&format!("/projects/{project_id}")))
+}
+
+#[route(POST "/projects/{project_id}/members/remove")]
+async fn remove_project_member(
+    cx: &Cx,
+    Form(payload): Form<RemoveProjectMemberForm>,
+) -> Result<SeeOther> {
+    let project_id = *path_param::<ProjectId>(cx)?;
+    require_project_manager(cx, project_id).await?;
+    project_repo::ProjectRepository::new(topcoat::context::app_context::<AppState>(cx).db.clone())
+        .remove_member(project_id, payload.user_id)
+        .await
+        .map_err(internal_server_error)?;
+    Ok(see_other(&format!("/projects/{project_id}")))
 }
 
 #[page("/projects/{project_id}/boards/new")]
@@ -281,6 +479,13 @@ async fn new_project_board_page(cx: &Cx) -> Result<impl View> {
         .is_none()
     {
         return Err(topcoat::router::error::not_found().into());
+    }
+    let role = project_repo::ProjectRepository::new(state.db.clone())
+        .role_for_user(id, user_id)
+        .await
+        .map_err(internal_server_error)?;
+    if !matches!(role.as_deref(), Some("owner" | "admin" | "member")) {
+        return Err(topcoat::router::error::forbidden().into());
     }
     let error = parse_query_params::<BoardPageQuery>(cx)
         .ok()
@@ -366,6 +571,13 @@ async fn create_project_board(cx: &Cx, Form(payload): Form<CreateBoardForm>) -> 
         .await
         .map_err(|error| internal_server_error(std::io::Error::other(error)))?
         .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    let role = project_repo::ProjectRepository::new(state.db.clone())
+        .role_for_user(project_id, user_id)
+        .await
+        .map_err(internal_server_error)?;
+    if !matches!(role.as_deref(), Some("owner" | "admin" | "member")) {
+        return Err(topcoat::router::error::forbidden().into());
+    }
     if let Err(error) = board_repo::BoardRepository::new(state.db.clone())
         .create_for_project(user_id, project_id, name)
         .await
@@ -543,6 +755,7 @@ async fn main() -> anyhow::Result<()> {
         .page(workspace_page)
         .page(new_workspace_project_page)
         .page(project_page)
+        .page(project_members_page)
         .page(new_project_board_page)
         .page(board_page)
         .cookies()
@@ -558,6 +771,9 @@ async fn main() -> anyhow::Result<()> {
         .route(create_workspace)
         .route(create_workspace_project)
         .route(create_project_board)
+        .route(add_project_member)
+        .route(update_project_member)
+        .route(remove_project_member)
         .route(logout)
         .route(TowerRoute::new(Methods::Any, Path::new("/{*rest}"), api))
         .assets(AssetBundle::load().expect("failed to load Topcoat asset bundle"))

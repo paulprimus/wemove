@@ -43,7 +43,11 @@ impl BoardRepository {
             .connect()
             .map_err(|error| AppError::Database(DbError::Connection(error.to_string())))?;
         conn.execute(
-            "INSERT INTO boards (user_id, project_id, name) SELECT ?1, id, ?3 FROM projects WHERE id = ?2 AND user_id = ?1",
+            "INSERT INTO boards (user_id, project_id, name)
+             SELECT ?1, projects.id, ?3 FROM projects
+             INNER JOIN project_members ON project_members.project_id = projects.id
+             WHERE projects.id = ?2 AND project_members.user_id = ?1
+               AND project_members.role IN ('owner', 'admin', 'member')",
             (user_id, project_id, name),
         )
         .await
@@ -109,7 +113,11 @@ impl BoardRepository {
             .connect()
             .map_err(|error| AppError::Database(DbError::Connection(error.to_string())))?;
         let mut statement = conn
-            .prepare("SELECT id, name FROM boards WHERE id = ?1 AND user_id = ?2")
+            .prepare(
+                "SELECT boards.id, boards.name FROM boards
+                 INNER JOIN project_members ON project_members.project_id = boards.project_id
+                 WHERE boards.id = ?1 AND project_members.user_id = ?2",
+            )
             .await
             .map_err(|error| AppError::Database(DbError::Query(error.to_string())))?;
         let mut rows = statement
@@ -160,7 +168,7 @@ impl BoardRepository {
             .db
             .connect()
             .map_err(|error| AppError::Database(DbError::Connection(error.to_string())))?;
-        let mut statement = conn.prepare("SELECT id, name FROM boards WHERE user_id = ?1 AND project_id = ?2 ORDER BY id DESC").await
+        let mut statement = conn.prepare("SELECT boards.id, boards.name FROM boards INNER JOIN project_members ON project_members.project_id = boards.project_id WHERE project_members.user_id = ?1 AND boards.project_id = ?2 ORDER BY boards.id DESC").await
             .map_err(|error| AppError::Database(DbError::Query(error.to_string())))?;
         let mut rows = statement
             .query((user_id, project_id))
@@ -221,23 +229,58 @@ mod tests {
             .expect("test database should be created");
         let conn = db.connect().expect("test database should connect");
         conn.execute(
-            "CREATE TABLE boards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+            "CREATE TABLE projects (
+                id INTEGER PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 name TEXT NOT NULL
             )",
             (),
         )
         .await
+        .expect("test projects table should be created");
+        conn.execute(
+            "CREATE TABLE project_members (
+                project_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                PRIMARY KEY (project_id, user_id)
+            )",
+            (),
+        )
+        .await
+        .expect("test project members table should be created");
+        conn.execute(
+            "CREATE TABLE boards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER,
+                name TEXT NOT NULL
+            )",
+            (),
+        )
+        .await
         .expect("test boards table should be created");
+        conn.execute(
+            "INSERT INTO projects (id, user_id, name) VALUES (1, 1, 'First'), (2, 2, 'Second')",
+            (),
+        )
+        .await
+        .expect("test projects should be inserted");
+        conn.execute(
+            "INSERT INTO project_members (project_id, user_id, role)
+             VALUES (1, 1, 'owner'), (2, 2, 'owner')",
+            (),
+        )
+        .await
+        .expect("project owners should be inserted");
 
         let repository = BoardRepository::new(db.clone());
         repository
-            .create_for_user(1, "Roadmap")
+            .create_for_project(1, 1, "Roadmap")
             .await
             .expect("board should be created");
         repository
-            .create_for_user(2, "Private board")
+            .create_for_project(2, 2, "Private board")
             .await
             .expect("second user's board should be created");
 
