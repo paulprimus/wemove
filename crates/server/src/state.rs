@@ -91,6 +91,17 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
 
     create_board_table(&conn).await?;
 
+    // Legacy boards tables may predate project associations.
+    if let Err(error) = conn
+        .execute("ALTER TABLE boards ADD COLUMN project_id INTEGER", ())
+        .await
+    {
+        let message = error.to_string();
+        if !message.contains("duplicate column") {
+            return Err(AppError::Database(DbError::Query(message)));
+        }
+    }
+
     if let Err(error) = conn
         .execute("ALTER TABLE projects ADD COLUMN workspace_id INTEGER", ())
         .await
@@ -138,17 +149,6 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
     )
     .await
     .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
-
-    // Keep databases created before projects were introduced usable.
-    if let Err(error) = conn
-        .execute("ALTER TABLE boards ADD COLUMN project_id INTEGER", ())
-        .await
-    {
-        let message = error.to_string();
-        if !message.contains("duplicate column") {
-            return Err(AppError::Database(DbError::Query(message)));
-        }
-    }
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id)",
@@ -238,7 +238,7 @@ async fn create_board_table(conn: &Connection) -> Result<(), AppError> {
         "CREATE TABLE IF NOT EXISTS boards (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            project_id INTEGER,
+            project_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -316,4 +316,106 @@ async fn create_project_members_table(conn: &Connection) -> Result<(), AppError>
     .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, time::SystemTime};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn migration_adds_project_id_before_backfilling_legacy_boards() {
+        let suffix = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system clock should be after the Unix epoch")
+            .as_nanos();
+        let db_path = std::env::temp_dir().join(format!("wemove-legacy-boards-{suffix}.db"));
+        let db_path_string = db_path.to_string_lossy();
+        let db = Builder::new_local(db_path_string.as_ref())
+            .build()
+            .await
+            .expect("test database should be created");
+        let conn = db.connect().expect("test database should connect");
+
+        conn.execute(
+            "CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                password_hash TEXT NOT NULL
+            )",
+            (),
+        )
+        .await
+        .expect("legacy users table should be created");
+        conn.execute(
+            "CREATE TABLE projects (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL
+            )",
+            (),
+        )
+        .await
+        .expect("legacy projects table should be created");
+        conn.execute(
+            "CREATE TABLE boards (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL
+            )",
+            (),
+        )
+        .await
+        .expect("legacy boards table should be created");
+        conn.execute(
+            "INSERT INTO users (id, email, name, password_hash)
+             VALUES (1, 'user@example.com', 'User', 'hash')",
+            (),
+        )
+        .await
+        .expect("legacy user should be inserted");
+        conn.execute(
+            "INSERT INTO projects (id, user_id, name) VALUES (7, 1, 'Project')",
+            (),
+        )
+        .await
+        .expect("legacy project should be inserted");
+        conn.execute(
+            "INSERT INTO boards (id, user_id, name) VALUES (11, 1, 'Board')",
+            (),
+        )
+        .await
+        .expect("legacy board should be inserted");
+
+        run_migrations(&db)
+            .await
+            .expect("legacy database migrations should succeed");
+
+        let mut statement = conn
+            .prepare("SELECT project_id FROM boards WHERE id = 11")
+            .await
+            .expect("migrated board query should prepare");
+        let mut rows = statement
+            .query(())
+            .await
+            .expect("migrated board query should execute");
+        let row = rows
+            .next()
+            .await
+            .expect("migrated board query should succeed")
+            .expect("migrated board should exist");
+        assert_eq!(
+            row.get_value(0)
+                .expect("migrated project ID should be readable"),
+            turso::Value::Integer(7)
+        );
+
+        drop(rows);
+        drop(statement);
+        drop(conn);
+        drop(db);
+        fs::remove_file(&db_path).expect("test database should be removed");
+    }
 }
