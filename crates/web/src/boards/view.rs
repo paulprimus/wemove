@@ -12,6 +12,37 @@ pub struct TicketColumn {
 }
 
 #[component]
+async fn create_ticket_form(board_id: i64, error: Option<String>) -> Result<impl View> {
+    Ok(view! {
+        <form method="post" action=(format!("/boards/{board_id}/tickets")) class="flex flex-col gap-6 p-6">
+            <h2 class="text-xl font-semibold tracking-tight text-foreground">"Create a ticket"</h2>
+            if let Some(message) = error {
+                <div class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">(message)</div>
+            }
+            <input
+                type="text"
+                name="title"
+                required=""
+                maxlength="200"
+                class="w-full rounded-lg border border-border bg-surface-strong px-4 py-3 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                placeholder="Ticket title"
+            >
+            <textarea
+                name="description"
+                maxlength="5000"
+                rows="4"
+                class="w-full rounded-lg border border-border bg-surface-strong px-4 py-3 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                placeholder="Description (optional)"
+            ></textarea>
+            <div class="flex items-center justify-end gap-3">
+                <button type="button" command="close" commandfor="create-ticket-dialog" class="rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground">"Cancel"</button>
+                <button type="submit" class="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/85 focus:outline-none focus:ring-2 focus:ring-ring">"Create ticket"</button>
+            </div>
+        </form>
+    })
+}
+
+#[component]
 pub async fn board_view(
     board_id: i64,
     name: &str,
@@ -36,31 +67,25 @@ pub async fn board_view(
                     <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">"Board"</p>
                     <h1 class="mt-3 text-4xl font-semibold tracking-tight text-foreground">(name)</h1>
                 </div>
+                if can_edit {
+                    <button
+                        type="button"
+                        command="show-modal"
+                        commandfor="create-ticket-dialog"
+                        class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/85"
+                    >"+ Create ticket"</button>
+                }
             </div>
-            if let Some(message) = error_message {
-                <div class="mt-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">(message)</div>
-            }
             if can_edit {
-                <form method="post" action=(format!("/boards/{board_id}/tickets")) class="mt-8 space-y-3 rounded-2xl border border-border bg-surface p-6">
-                    <input
-                        type="text"
-                        name="title"
-                        required=""
-                        maxlength="200"
-                        class="w-full rounded-lg border border-border bg-surface-strong px-4 py-3 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                        placeholder="Ticket title"
-                    >
-                    <textarea
-                        name="description"
-                        maxlength="5000"
-                        rows="3"
-                        class="w-full rounded-lg border border-border bg-surface-strong px-4 py-3 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                        placeholder="Description (optional)"
-                    ></textarea>
-                    <div class="flex justify-end">
-                        <button type="submit" class="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/85 focus:outline-none focus:ring-2 focus:ring-ring">"+ Create ticket"</button>
-                    </div>
-                </form>
+                if error_message.is_some() {
+                    <dialog id="create-ticket-dialog" open="" class="mx-auto mt-24 mb-auto w-1/2 min-w-[22rem] max-w-none rounded-2xl border border-border bg-surface p-0 text-foreground shadow-2xl ring-1 ring-black/10 backdrop:bg-black/50 backdrop:backdrop-blur-sm">
+                        create_ticket_form(board_id: board_id, error: error_message.map(str::to_owned))
+                    </dialog>
+                } else {
+                    <dialog id="create-ticket-dialog" class="mx-auto mt-24 mb-auto w-1/2 min-w-[22rem] max-w-none rounded-2xl border border-border bg-surface p-0 text-foreground shadow-2xl ring-1 ring-black/10 backdrop:bg-black/50 backdrop:backdrop-blur-sm">
+                        create_ticket_form(board_id: board_id, error: None)
+                    </dialog>
+                }
             }
             <section class="mt-10 grid gap-4 md:grid-cols-3">
                 for column in columns {
