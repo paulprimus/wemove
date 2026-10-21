@@ -159,6 +159,31 @@ impl BoardRepository {
         Ok(Some(Board { id, name }))
     }
 
+    pub async fn can_edit(&self, user_id: i64, board_id: i64) -> Result<bool, AppError> {
+        let conn = self
+            .db
+            .connect()
+            .map_err(|error| AppError::Database(DbError::Connection(error.to_string())))?;
+        let mut statement = conn
+            .prepare(
+                "SELECT 1 FROM boards
+                 INNER JOIN project_members ON project_members.project_id = boards.project_id
+                 WHERE boards.id = ?1 AND project_members.user_id = ?2
+                   AND project_members.role IN ('owner', 'admin', 'member')",
+            )
+            .await
+            .map_err(|error| AppError::Database(DbError::Query(error.to_string())))?;
+        let mut rows = statement
+            .query((board_id, user_id))
+            .await
+            .map_err(|error| AppError::Database(DbError::Query(error.to_string())))?;
+        Ok(rows
+            .next()
+            .await
+            .map_err(|error| AppError::Database(DbError::Query(error.to_string())))?
+            .is_some())
+    }
+
     pub async fn list_for_project(
         &self,
         user_id: i64,

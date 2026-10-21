@@ -3,8 +3,8 @@ use common::{LoginRequest, LoginResponse, RegisterRequest, RegisterResponse};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::repo::user::{CreateUser, UserRepository};
 use crate::state::AppState;
-use crate::user_repo::{CreateUser, UserRepository};
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct JsonTokenRequest {

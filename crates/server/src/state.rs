@@ -91,6 +91,8 @@ async fn run_migrations(db: &turso::Database) -> Result<(), AppError> {
 
     create_board_table(&conn).await?;
 
+    create_ticket_table(&conn).await?;
+
     // Legacy boards tables may predate project associations.
     if let Err(error) = conn
         .execute("ALTER TABLE boards ADD COLUMN project_id INTEGER", ())
@@ -245,6 +247,33 @@ async fn create_board_table(conn: &Connection) -> Result<(), AppError> {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    Ok(())
+}
+
+async fn create_ticket_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            board_id INTEGER NOT NULL,
+            created_by INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        (),
+    )
+    .await
+    .map_err(|e| AppError::Database(DbError::Query(e.to_string())))?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tickets_board_id ON tickets(board_id)",
         (),
     )
     .await

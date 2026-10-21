@@ -1,13 +1,10 @@
 mod auth_rest;
-mod board_repo;
 mod error;
 mod handlers;
 mod openapi;
-mod project_repo;
+mod repo;
 mod routes;
 mod state;
-mod user_repo;
-mod workspace_repo;
 
 use std::time::Duration;
 
@@ -32,7 +29,11 @@ use topcoat::session::{self, Session};
 use topcoat::view::{View, view};
 use tracing;
 
-use user_repo::{CreateUser, UserRepository};
+use repo::user::{CreateUser, UserRepository};
+use repo::{
+    board as board_repo, project as project_repo, ticket as ticket_repo,
+    workspace as workspace_repo,
+};
 use web::app::app_layout;
 use web::auth::login::login as login_page;
 use web::auth::register::register as register_page;
@@ -49,6 +50,13 @@ struct BoardPageQuery {
 #[derive(serde::Deserialize)]
 struct CreateBoardForm {
     name: String,
+}
+
+#[derive(serde::Deserialize)]
+struct CreateTicketForm {
+    title: String,
+    #[serde(default)]
+    description: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -517,7 +525,84 @@ async fn board_page(cx: &Cx) -> Result<impl View> {
         })?
         .ok_or_else(topcoat::router::error::not_found)?;
 
-    Ok(view! { web::boards::view::board_view(name: board.name.as_str()) })
+    let tickets = ticket_repo::TicketRepository::new(state.db.clone())
+        .list_for_board(user_id, *id)
+        .await
+        .map_err(|error| {
+            tracing::error!("Failed to load tickets for board {}: {}", id, error);
+            internal_server_error(error)
+        })?;
+    let columns = [
+        ("todo", "To do"),
+        ("in_progress", "In progress"),
+        ("done", "Done"),
+    ]
+    .into_iter()
+    .map(|(status, title)| web::boards::view::TicketColumn {
+        title: title.to_owned(),
+        tickets: tickets
+            .iter()
+            .filter(|ticket| ticket.status == status)
+            .map(|ticket| web::boards::view::TicketSummary {
+                title: ticket.title.clone(),
+                description: ticket.description.clone(),
+            })
+            .collect(),
+    })
+    .collect::<Vec<_>>();
+    let can_edit = board_repo::BoardRepository::new(state.db.clone())
+        .can_edit(user_id, *id)
+        .await
+        .map_err(internal_server_error)?;
+    let error = parse_query_params::<BoardPageQuery>(cx)
+        .ok()
+        .and_then(|query| query.error);
+
+    Ok(view! {
+        web::boards::view::board_view(
+            board_id: *id,
+            name: board.name.as_str(),
+            columns: columns,
+            can_edit: can_edit,
+            error: error
+        )
+    })
+}
+
+#[route(POST "/boards/{board_id}/tickets")]
+async fn create_board_ticket(cx: &Cx, Form(payload): Form<CreateTicketForm>) -> Result<SeeOther> {
+    let board_id = *path_param::<BoardId>(cx)?;
+    let title = payload.title.trim();
+    let description = payload.description.trim();
+    let redirect_error = |code: &str| see_other(&format!("/boards/{board_id}?error={code}"));
+    if title.is_empty() {
+        return Ok(redirect_error("empty_title"));
+    }
+    if title.chars().count() > 200 {
+        return Ok(redirect_error("title_too_long"));
+    }
+    if description.chars().count() > 5000 {
+        return Ok(redirect_error("description_too_long"));
+    }
+    let state = topcoat::context::app_context::<AppState>(cx);
+    let Some(hash) = session::token_hash(cx).await? else {
+        return Ok(see_other("/login"));
+    };
+    let user_id = session_user_id(state, &hash)
+        .await
+        .map_err(|error| internal_server_error(std::io::Error::other(error)))?
+        .ok_or_else(|| topcoat::router::error::redirect("/login"))?;
+    match ticket_repo::TicketRepository::new(state.db.clone())
+        .create_for_board(user_id, board_id, title, description)
+        .await
+    {
+        Ok(true) => Ok(see_other(&format!("/boards/{board_id}"))),
+        Ok(false) => Err(topcoat::router::error::forbidden().into()),
+        Err(error) => {
+            tracing::error!("Failed to create ticket on board {}: {}", board_id, error);
+            Ok(redirect_error("storage"))
+        }
+    }
 }
 
 async fn session_user_id(
@@ -771,6 +856,7 @@ async fn main() -> anyhow::Result<()> {
         .route(create_workspace)
         .route(create_workspace_project)
         .route(create_project_board)
+        .route(create_board_ticket)
         .route(add_project_member)
         .route(update_project_member)
         .route(remove_project_member)
