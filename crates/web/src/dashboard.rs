@@ -2,7 +2,8 @@ use topcoat::Result;
 use topcoat::context::Cx;
 use topcoat::router::{error::redirect, page};
 use topcoat::session;
-use topcoat::view::{View, component, view};
+use topcoat::runtime::link;
+use topcoat::view::{View, attributes, component, view};
 
 pub struct WorkspaceSummary {
     pub id: i64,
@@ -41,11 +42,13 @@ pub async fn dashboard_view(workspaces: Vec<WorkspaceSummary>) -> Result<impl Vi
                 } else {
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         for workspace in workspaces {
-                            <a href=(format!("/workspaces/{}", workspace.id)) class="block rounded-2xl border border-border bg-surface p-6 shadow-xs transition-colors hover:border-primary/60 hover:bg-surface-muted">
+                            link(
+                                href: format!("/workspaces/{}", workspace.id),
+                                attrs: attributes! { class="block rounded-2xl border border-border bg-surface p-6 shadow-xs transition-colors hover:border-primary/60 hover:bg-surface-muted" },
                                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-xl text-primary">"≡"</div>
                                 <h3 class="mt-4 text-lg font-semibold text-foreground">(workspace.name)</h3>
                                 <p class="mt-1 text-sm text-muted-foreground">"Workspace with projects"</p>
-                            </a>
+                            )
                         }
                     </div>
                 }

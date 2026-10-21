@@ -1,5 +1,6 @@
 use topcoat::Result;
-use topcoat::view::{View, component, view};
+use topcoat::runtime::link;
+use topcoat::view::{View, attributes, component, view};
 
 #[component]
 pub async fn create_board_form(project_id: i64, error: Option<String>) -> Result<impl View> {
@@ -12,7 +13,7 @@ pub async fn create_board_form(project_id: i64, error: Option<String>) -> Result
     Ok(view! {
         <main class="mx-auto flex min-h-[calc(100vh-73px)] max-w-6xl items-center justify-center px-6 py-16">
             <section class="w-full max-w-xl rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-10">
-                <a href="/dashboard" class="text-sm font-medium text-muted-foreground hover:text-foreground">"Back to dashboard"</a>
+                link(href: "/dashboard", attrs: attributes! { class="text-sm font-medium text-muted-foreground hover:text-foreground" }, "Back to dashboard")
                 <p class="mt-8 text-sm font-semibold uppercase tracking-[0.3em] text-primary">"Workspace"</p>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight text-foreground">"Create a board"</h1>
                 <p class="mt-3 text-muted-foreground">"Give your Kanban board a name to get started."</p>

@@ -1,5 +1,6 @@
 use topcoat::Result;
-use topcoat::view::{View, component, view};
+use topcoat::runtime::link;
+use topcoat::view::{View, attributes, component, view};
 
 pub struct BoardSummary {
     pub id: i64,
@@ -22,7 +23,11 @@ pub async fn project_view(
 ) -> Result<impl View> {
     Ok(view! {
         <main class="mx-auto max-w-6xl px-6 py-16">
-            <a href="/dashboard" class="text-sm font-medium text-muted-foreground hover:text-foreground">"Back to dashboard"</a>
+            link(
+                href: "/dashboard",
+                attrs: attributes! { class="text-sm font-medium text-muted-foreground hover:text-foreground" },
+                "Back to dashboard"
+            )
             <p class="mt-8 text-sm font-semibold uppercase tracking-[0.3em] text-primary">"Project"</p>
             <h1 class="mt-3 text-4xl font-semibold tracking-tight text-foreground">(name)</h1>
             <section class="mt-10">
@@ -38,11 +43,13 @@ pub async fn project_view(
                 } else {
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         for board in boards {
-                            <a href=(format!("/boards/{}", board.id)) class="block rounded-2xl border border-border bg-surface p-6 shadow-xs transition-colors hover:border-primary/60 hover:bg-surface-muted">
+                            link(
+                                href: format!("/boards/{}", board.id),
+                                attrs: attributes! { class="block rounded-2xl border border-border bg-surface p-6 shadow-xs transition-colors hover:border-primary/60 hover:bg-surface-muted" },
                                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-xl text-primary">"≡"</div>
                                 <h3 class="mt-4 text-lg font-semibold text-foreground">(board.name)</h3>
                                 <p class="mt-1 text-sm text-muted-foreground">"Kanban board"</p>
-                            </a>
+                            )
                         }
                     </div>
                 }
@@ -96,7 +103,11 @@ pub async fn project_members_view(
 
     Ok(view! {
         <main class="mx-auto max-w-4xl px-6 py-16">
-            <a href=(format!("/projects/{project_id}")) class="text-sm font-medium text-muted-foreground hover:text-foreground">"Back to project"</a>
+            link(
+                href: format!("/projects/{project_id}"),
+                attrs: attributes! { class="text-sm font-medium text-muted-foreground hover:text-foreground" },
+                "Back to project"
+            )
             <p class="mt-8 text-sm font-semibold uppercase tracking-[0.3em] text-primary">"Project settings"</p>
             <h1 class="mt-3 text-4xl font-semibold tracking-tight text-foreground">"Participants"</h1>
             <p class="mt-2 text-muted-foreground">"Manage access to " (name) "."</p>

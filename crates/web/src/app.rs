@@ -13,10 +13,20 @@ use topcoat::{
 const THEME_SCRIPT: &str = r#"<script>
 (() => {
     const storageKey = "wemove-theme";
-    document.documentElement.classList.toggle(
-        "light",
-        window.localStorage.getItem(storageKey) === "light",
-    );
+    const apply = () => {
+        const light = window.localStorage.getItem(storageKey) === "light";
+        if (document.documentElement.classList.contains("light") !== light) {
+            document.documentElement.classList.toggle("light", light);
+        }
+    };
+    apply();
+
+    // Client-side navigation may re-run this script or replace <html> attributes.
+    if (window.__wemoveTheme) {
+        return;
+    }
+    window.__wemoveTheme = true;
+    new MutationObserver(apply).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     document.addEventListener("click", (event) => {
         if (!(event.target instanceof Element) || !event.target.closest("[data-theme-toggle]")) {

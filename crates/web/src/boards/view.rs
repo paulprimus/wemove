@@ -1,5 +1,6 @@
 use topcoat::Result;
-use topcoat::view::{View, component, view};
+use topcoat::runtime::link;
+use topcoat::view::{View, attributes, component, view};
 
 pub struct TicketSummary {
     pub title: String,
@@ -59,9 +60,11 @@ pub async fn board_view(
 
     Ok(view! {
         <main class="mx-auto max-w-6xl px-6 py-16">
-            <a href="/dashboard" class="text-sm font-medium text-muted-foreground hover:text-foreground">
+            link(
+                href: "/dashboard",
+                attrs: attributes! { class="text-sm font-medium text-muted-foreground hover:text-foreground" },
                 "Back to dashboard"
-            </a>
+            )
             <div class="mt-8 flex items-start justify-between gap-6">
                 <div>
                     <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">"Board"</p>
